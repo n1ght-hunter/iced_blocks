@@ -1,0 +1,23 @@
+[workspace]
+git_release_enable = false
+git_tag_enable = true
+
+[changelog]
+commit_parsers = [
+    { message = "^feat", group = "Added" },
+    { message = "^[a|A]dd", group = "Added" },
+    { message = "^[s|S]upport", group = "Added" },
+    { message = "^.*: add", group = "Added" },
+    { message = "^.*: support", group = "Added" },
+    { message = "^changed", group = "Changed" },
+    { message = "^deprecated", group = "Deprecated" },
+    { message = "^[r|R]emove", group = "Removed" },
+    { message = "^.*: remove", group = "Removed" },
+    { message = "^.*: delete", group = "Removed" },
+    { message = "^fix", group = "Fixed" },
+    { message = "^.*: fix", group = "Fixed" },
+    { message = "^security", group = "Security" },
+    { message = "^chore", skip = true },
+    { message = "^ci", skip = true },
+    { message = "^.*", group = "Changed" },
+]
