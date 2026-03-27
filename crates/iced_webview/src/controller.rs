@@ -38,24 +38,15 @@ impl Default for Content {
     }
 }
 
+type CustomizeFn = Box<dyn FnOnce(&mut WebViewBuilder) + Send>;
+
+#[derive(Default)]
 pub struct WebViewConfig {
     content: Content,
     transparent: bool,
     devtools: bool,
     initialization_scripts: Vec<String>,
-    customize: Option<Box<dyn FnOnce(&mut WebViewBuilder) + Send>>,
-}
-
-impl Default for WebViewConfig {
-    fn default() -> Self {
-        Self {
-            content: Content::default(),
-            transparent: false,
-            devtools: false,
-            initialization_scripts: Vec::new(),
-            customize: None,
-        }
-    }
+    customize: Option<CustomizeFn>,
 }
 
 impl WebViewConfig {
@@ -84,10 +75,7 @@ impl WebViewConfig {
         self
     }
 
-    pub fn customize(
-        mut self,
-        f: impl FnOnce(&mut WebViewBuilder) + Send + 'static,
-    ) -> Self {
+    pub fn customize(mut self, f: impl FnOnce(&mut WebViewBuilder) + Send + 'static) -> Self {
         self.customize = Some(Box::new(f));
         self
     }
@@ -164,7 +152,16 @@ impl WebViewController {
         self.ipc_rx = Some(ipc_rx);
 
         window::run(window_id, move |window| {
-            let result = build_webview(id, window, content, transparent, devtools, scripts, customize, ipc_tx);
+            let result = build_webview(
+                id,
+                window,
+                content,
+                transparent,
+                devtools,
+                scripts,
+                customize,
+                ipc_tx,
+            );
             match &result {
                 Ok(()) => info!("WebView created successfully"),
                 Err(e) => error!("Failed to create WebView: {e}"),
@@ -219,7 +216,7 @@ impl WebViewController {
         }
     }
 
-    /// Returns a subscription that yields [`IpcMessage`]s sent from the page
+    /// Returns a subscription that yields [`IpcMessage`](crate::IpcMessage)s sent from the page
     /// via `window.ipc.postMessage()`.
     ///
     /// Call this from your app's `subscription()` and `.map()` the output to
@@ -231,7 +228,9 @@ impl WebViewController {
         };
 
         iced::Subscription::run_with(
-            IpcSubData { rx: Arc::clone(ipc_rx) },
+            IpcSubData {
+                rx: Arc::clone(ipc_rx),
+            },
             build_ipc_stream,
         )
     }
@@ -258,9 +257,14 @@ impl Hash for IpcSubData {
 fn build_ipc_stream(
     data: &IpcSubData,
 ) -> futures::channel::mpsc::UnboundedReceiver<crate::ipc::IpcMessage> {
-    data.rx.lock().unwrap().take().expect("ipc receiver already consumed")
+    data.rx
+        .lock()
+        .unwrap()
+        .take()
+        .expect("ipc receiver already consumed")
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_webview(
     id: u64,
     window: &dyn iced::window::Window,
@@ -268,7 +272,7 @@ fn build_webview(
     transparent: bool,
     devtools: bool,
     scripts: Vec<String>,
-    customize: Option<Box<dyn FnOnce(&mut WebViewBuilder) + Send>>,
+    customize: Option<CustomizeFn>,
     ipc_tx: ipc::IpcSender,
 ) -> Result<(), String> {
     remove_clip_children(window);

@@ -1,3 +1,5 @@
+//! Shader primitive that packages per-frame skin rendering data.
+
 use iced::{
     Rectangle, wgpu,
     widget::shader::{self, Viewport},

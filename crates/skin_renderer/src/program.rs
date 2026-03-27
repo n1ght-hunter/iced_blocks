@@ -1,3 +1,5 @@
+//! Iced shader program for animated 3D player skin rendering.
+
 use iced::{
     Event, Point, Rectangle, mouse,
     widget::shader::{self, Action, Shader},

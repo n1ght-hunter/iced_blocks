@@ -1,3 +1,5 @@
+//! Minecraft player model: body part definitions, geometry, and UV mapping.
+
 pub mod geometry;
 pub mod uv;
 

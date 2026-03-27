@@ -34,9 +34,7 @@ impl App {
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::GotWindow(Some(id)) => self
-                .controller
-                .create_task(id, Message::WebViewReady),
+            Message::GotWindow(Some(id)) => self.controller.create_task(id, Message::WebViewReady),
             Message::GotWindow(None) => Task::none(),
             Message::WebViewReady(Ok(())) => {
                 self.controller.take_staged();

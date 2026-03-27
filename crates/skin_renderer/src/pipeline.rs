@@ -1,3 +1,5 @@
+//! WGPU render pipeline setup for the skin shader.
+
 use iced::wgpu;
 
 use crate::vertex::Vertex;
