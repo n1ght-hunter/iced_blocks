@@ -1,3 +1,5 @@
+//! Animation state and limb rotation over time.
+
 use std::time::Instant;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

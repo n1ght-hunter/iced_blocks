@@ -1,3 +1,5 @@
+//! Orbit camera with drag-to-rotate and scroll-to-zoom.
+
 use glam::{Mat4, Vec3};
 
 pub struct OrbitCamera {

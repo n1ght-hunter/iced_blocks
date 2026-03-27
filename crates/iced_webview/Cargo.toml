@@ -2,6 +2,9 @@
 name = "iced_webview"
 version = "0.1.0"
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Embed a WRY WebView as a child window inside an Iced application"
 
 [dependencies]
 iced = { workspace = true, features = ["advanced", "tokio"] }

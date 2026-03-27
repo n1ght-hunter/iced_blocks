@@ -1,4 +1,8 @@
-use iced::{Element, Fill, Subscription, Task, widget::{column, scrollable, text}, window};
+use iced::{
+    Element, Fill, Subscription, Task,
+    widget::{column, scrollable, text},
+    window,
+};
 use iced_webview::{IpcMessage, WebViewConfig, WebViewController, webview};
 
 fn main() -> iced::Result {
@@ -37,9 +41,7 @@ enum Message {
 
 impl App {
     fn new() -> (Self, Task<Message>) {
-        let config = WebViewConfig::default()
-            .html(HTML)
-            .devtools(true);
+        let config = WebViewConfig::default().html(HTML).devtools(true);
 
         (
             Self {
@@ -52,9 +54,7 @@ impl App {
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::GotWindow(Some(id)) => self
-                .controller
-                .create_task(id, Message::WebViewReady),
+            Message::GotWindow(Some(id)) => self.controller.create_task(id, Message::WebViewReady),
             Message::GotWindow(None) => Task::none(),
             Message::WebViewReady(Ok(())) => {
                 self.controller.take_staged();
@@ -79,10 +79,13 @@ impl App {
     }
 
     fn view(&self) -> Element<'_, Message> {
-        let log = self.messages.iter().rev().fold(
-            column![].spacing(4),
-            |col, msg| col.push(text(format!("← {msg}")).size(14)),
-        );
+        let log = self
+            .messages
+            .iter()
+            .rev()
+            .fold(column![].spacing(4), |col, msg| {
+                col.push(text(format!("← {msg}")).size(14))
+            });
 
         column![
             webview(&self.controller).height(200),
