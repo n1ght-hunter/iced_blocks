@@ -1,5 +1,5 @@
 use iced::{Element, Task, widget::column, window};
-use iced_webview::{WebViewConfig, WebViewController, webview};
+use iced_wry::{WebViewConfig, WebViewController, webview};
 
 fn main() -> iced::Result {
     tracing_subscriber::fmt::init();

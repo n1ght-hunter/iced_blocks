@@ -1870,18 +1870,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "iced_webview"
-version = "0.1.0"
-dependencies = [
- "futures",
- "iced",
- "tracing",
- "tracing-subscriber",
- "windows-sys 0.61.2",
- "wry",
-]
-
-[[package]]
 name = "iced_wgpu"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1932,6 +1920,18 @@ dependencies = [
  "web-sys",
  "window_clipboard",
  "winit",
+]
+
+[[package]]
+name = "iced_wry"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "iced",
+ "tracing",
+ "tracing-subscriber",
+ "windows-sys 0.61.2",
+ "wry",
 ]
 
 [[package]]
