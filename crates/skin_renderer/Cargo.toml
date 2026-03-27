@@ -1,0 +1,13 @@
+[package]
+name = "skin_renderer"
+version = "0.1.0"
+edition.workspace = true
+
+[dependencies]
+iced = { workspace = true, features = ["wgpu"] }
+glam.workspace = true
+bytemuck.workspace = true
+
+[dev-dependencies]
+iced = { workspace = true, features = ["wgpu"] }
+image = { workspace = true, features = ["png"] }

@@ -1,0 +1,16 @@
+[package]
+name = "iced_webview"
+version = "0.1.0"
+edition.workspace = true
+
+[dependencies]
+iced = { workspace = true, features = ["advanced", "tokio"] }
+wry.workspace = true
+tracing.workspace = true
+futures.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true
+
+[dev-dependencies]
+tracing-subscriber.workspace = true
