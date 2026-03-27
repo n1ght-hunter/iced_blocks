@@ -3,7 +3,7 @@ use iced::{
     widget::{column, scrollable, text},
     window,
 };
-use iced_webview::{IpcMessage, WebViewConfig, WebViewController, webview};
+use iced_wry::{IpcMessage, WebViewConfig, WebViewController, webview};
 
 fn main() -> iced::Result {
     tracing_subscriber::fmt::init();
