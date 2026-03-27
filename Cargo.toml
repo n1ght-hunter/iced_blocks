@@ -10,7 +10,7 @@ repository = "https://github.com/n1ght-hunter/iced_blocks"
 [workspace.dependencies]
 iced = "0.14"
 futures = "0.3"
-wry = "0.54"
+wry = "0.55"
 glam = "0.32"
 bytemuck = { version = "1", features = ["derive"] }
 tracing = "0.1"
