@@ -1,5 +1,5 @@
 use iced::{Element, Length, widget::column};
-use skin_renderer::{AnimationMode, ArmVariant, SkinProgram};
+use iced_mc_skin::{AnimationMode, ArmVariant, SkinProgram};
 
 fn main() -> iced::Result {
     iced::application(App::new, App::update, App::view)

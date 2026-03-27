@@ -1817,6 +1817,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "iced_mc_skin"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "glam 0.32.1",
+ "iced",
+ "image",
+]
+
+[[package]]
 name = "iced_program"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3696,16 +3706,6 @@ name = "siphasher"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b2aa850e253778c88a04c3d7323b043aeda9d3e30d5971937c1855769763678e"
-
-[[package]]
-name = "skin_renderer"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "glam 0.32.1",
- "iced",
- "image",
-]
 
 [[package]]
 name = "skrifa"

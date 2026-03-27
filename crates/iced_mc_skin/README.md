@@ -1,4 +1,4 @@
-# skin_renderer
+# iced_mc_skin
 
 An [Iced](https://github.com/iced-rs/iced) shader widget for rendering 3D Minecraft player skins with animation and orbit camera controls.
 

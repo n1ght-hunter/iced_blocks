@@ -8,7 +8,7 @@ A collection of reusable widgets and utilities extracted from personal projects.
 
 
 - [`iced_wry`](crates/iced_wry) Embeds a WRY webview as a child window inside an Iced application
-- [`skin_renderer`](crates/skin_renderer) Iced shader widget for rendering 3D Minecraft player skins
+- [`iced_mc_skin`](crates/iced_mc_skin) Iced shader widget for rendering 3D Minecraft player skins
 
 ## Contributing
 
