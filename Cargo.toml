@@ -10,6 +10,13 @@ repository = "https://github.com/n1ght-hunter/iced_blocks"
 [workspace.dependencies]
 iced_native_surface = { version = "0.1.0", path = "crates/iced_native_surface" }
 iced = "0.14"
+iced_wgpu = "0.14"
+wgpu = "27"
+raw-window-handle = "0.6"
+servo = { version = "=0.1.0", default-features = false }
+url = "2"
+dpi = "0.1"
+euclid = "0.22"
 futures = "0.3"
 wry = "0.55"
 glam = "0.32"

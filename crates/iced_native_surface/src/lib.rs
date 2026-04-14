@@ -8,7 +8,7 @@
 //! their own [`BoundsSink`] implementation to reposition their underlying
 //! native surface.
 
-use std::rc::Rc;
+use std::{cell::Cell, rc::Rc};
 
 use iced::{
     Element, Event, Length, Rectangle, Size,
@@ -37,7 +37,8 @@ pub trait BoundsSink: 'static {
 
 #[derive(Default)]
 struct State {
-    last_bounds: Option<Rectangle>,
+    // `Cell` so `draw` (which takes `&Tree`) can update this without an event.
+    last_bounds: Cell<Option<Rectangle>>,
 }
 
 /// Placeholder widget that reserves layout space for a native child surface.
@@ -108,14 +109,27 @@ where
 
     fn draw(
         &self,
-        _tree: &Tree,
+        tree: &Tree,
         _renderer: &mut Renderer,
         _theme: &Theme,
         _style: &renderer::Style,
-        _layout: Layout<'_>,
+        layout: Layout<'_>,
         _cursor: mouse::Cursor,
         _viewport: &Rectangle,
     ) {
+        // `draw` runs on every render frame, including the very first one
+        // (before any user input event has had a chance to trigger `update`).
+        // Push bounds from here so the attached sink sees the real layout
+        // without waiting for a mouse move.
+        let Some(sink) = &self.sink else {
+            return;
+        };
+        let state = tree.state.downcast_ref::<State>();
+        let bounds = layout.bounds();
+        if state.last_bounds.get() != Some(bounds) {
+            state.last_bounds.set(Some(bounds));
+            sink.apply(bounds);
+        }
     }
 
     fn update(
@@ -133,11 +147,11 @@ where
             return;
         };
 
-        let state = tree.state.downcast_mut::<State>();
+        let state = tree.state.downcast_ref::<State>();
         let bounds = layout.bounds();
 
-        if state.last_bounds.as_ref() != Some(&bounds) {
-            state.last_bounds = Some(bounds);
+        if state.last_bounds.get() != Some(bounds) {
+            state.last_bounds.set(Some(bounds));
             sink.apply(bounds);
         }
 
