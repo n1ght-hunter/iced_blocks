@@ -1,5 +1,14 @@
-//! Placeholder widget that reserves layout space for the webview and
-//! drives bounds updates and focus management through shared state.
+//! Generic placeholder widget for embedding a native OS child surface inside
+//! an Iced layout.
+//!
+//! The widget reserves layout space, reports its current bounds to a
+//! [`BoundsSink`] whenever they change, and asks the sink to refocus the
+//! parent window when the user clicks outside the reserved area. Backends
+//! (webview engines, video players, native map views, GL canvases, …) supply
+//! their own [`BoundsSink`] implementation to reposition their underlying
+//! native surface.
+
+use std::rc::Rc;
 
 use iced::{
     Element, Event, Length, Rectangle, Size,
@@ -12,53 +21,72 @@ use iced::{
     mouse,
 };
 
-use crate::controller::BoundsSender;
+/// Receives layout updates from a [`NativeSurfacePlaceholder`].
+///
+/// Implementations are expected to reposition their underlying native child
+/// surface to the reported bounds and to return keyboard focus to the parent
+/// window when [`refocus_parent`](Self::refocus_parent) is called.
+pub trait BoundsSink: 'static {
+    /// Called whenever the placeholder's layout bounds change.
+    fn apply(&self, bounds: Rectangle);
+
+    /// Called when the user clicks outside the placeholder; the sink should
+    /// transfer keyboard focus back to the parent window.
+    fn refocus_parent(&self);
+}
 
 #[derive(Default)]
 struct State {
     last_bounds: Option<Rectangle>,
 }
 
-pub struct WebViewPlaceholder<Message> {
+/// Placeholder widget that reserves layout space for a native child surface.
+pub struct NativeSurfacePlaceholder<Message> {
     width: Length,
     height: Length,
-    bounds_tx: Option<BoundsSender>,
+    sink: Option<Rc<dyn BoundsSink>>,
     _message: std::marker::PhantomData<Message>,
 }
 
-impl<Message> WebViewPlaceholder<Message> {
+impl<Message> NativeSurfacePlaceholder<Message> {
+    /// Create a placeholder with no bounds sink attached. Without a sink the
+    /// widget still reserves layout space but does not report updates.
     pub fn new() -> Self {
         Self {
             width: Length::Fill,
             height: Length::Fill,
-            bounds_tx: None,
+            sink: None,
             _message: std::marker::PhantomData,
         }
     }
 
+    /// Set the placeholder width.
     pub fn width(mut self, width: impl Into<Length>) -> Self {
         self.width = width.into();
         self
     }
 
+    /// Set the placeholder height.
     pub fn height(mut self, height: impl Into<Length>) -> Self {
         self.height = height.into();
         self
     }
 
-    pub(crate) fn bounds_sender(mut self, sender: BoundsSender) -> Self {
-        self.bounds_tx = Some(sender);
+    /// Attach a [`BoundsSink`] that will receive layout and focus updates.
+    pub fn bounds_sink(mut self, sink: Rc<dyn BoundsSink>) -> Self {
+        self.sink = Some(sink);
         self
     }
 }
 
-impl<Message> Default for WebViewPlaceholder<Message> {
+impl<Message> Default for NativeSurfacePlaceholder<Message> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<Message, Theme, Renderer> Widget<Message, Theme, Renderer> for WebViewPlaceholder<Message>
+impl<Message, Theme, Renderer> Widget<Message, Theme, Renderer>
+    for NativeSurfacePlaceholder<Message>
 where
     Renderer: renderer::Renderer,
 {
@@ -101,7 +129,7 @@ where
         _shell: &mut Shell<'_, Message>,
         _viewport: &Rectangle,
     ) {
-        let Some(tx) = &self.bounds_tx else {
+        let Some(sink) = &self.sink else {
             return;
         };
 
@@ -110,25 +138,25 @@ where
 
         if state.last_bounds.as_ref() != Some(&bounds) {
             state.last_bounds = Some(bounds);
-            tx.apply(bounds);
+            sink.apply(bounds);
         }
 
         if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) = event
             && !cursor.is_over(bounds)
         {
-            tx.refocus_parent();
+            sink.refocus_parent();
         }
     }
 }
 
-impl<'a, Message, Theme, Renderer> From<WebViewPlaceholder<Message>>
+impl<'a, Message, Theme, Renderer> From<NativeSurfacePlaceholder<Message>>
     for Element<'a, Message, Theme, Renderer>
 where
     Message: 'a,
     Theme: 'a,
     Renderer: renderer::Renderer + 'a,
 {
-    fn from(placeholder: WebViewPlaceholder<Message>) -> Self {
+    fn from(placeholder: NativeSurfacePlaceholder<Message>) -> Self {
         Self::new(placeholder)
     }
 }

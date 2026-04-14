@@ -4,11 +4,13 @@
 
 mod controller;
 mod ipc;
-mod widget;
 
 pub use controller::{Content, WebViewConfig, WebViewController};
 pub use ipc::IpcMessage;
-pub use widget::WebViewPlaceholder;
+
+/// Backwards-compatible alias for the generic placeholder widget that now
+/// lives in [`iced_native_surface`].
+pub type WebViewPlaceholder<Message> = iced_native_surface::NativeSurfacePlaceholder<Message>;
 
 /// Create a webview placeholder widget bound to the given controller.
 ///
@@ -16,5 +18,5 @@ pub use widget::WebViewPlaceholder;
 /// resize, and returns focus to the parent window when the user clicks
 /// outside the webview area.
 pub fn webview<Message>(controller: &WebViewController) -> WebViewPlaceholder<Message> {
-    WebViewPlaceholder::new().bounds_sender(controller.bounds_sender())
+    WebViewPlaceholder::new().bounds_sink(controller.bounds_sender())
 }

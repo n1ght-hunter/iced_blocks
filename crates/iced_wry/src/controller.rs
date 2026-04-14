@@ -13,6 +13,7 @@ use std::{
 };
 
 use iced::{Rectangle, Task, window};
+use iced_native_surface::BoundsSink;
 use tracing::{error, info};
 use wry::{
     Rect, WebViewBuilder,
@@ -86,11 +87,10 @@ struct SharedState {
     last_bounds: Option<Rectangle>,
 }
 
-#[derive(Clone)]
 pub(crate) struct BoundsSender(Rc<RefCell<SharedState>>);
 
-impl BoundsSender {
-    pub(crate) fn apply(&self, bounds: Rectangle) {
+impl BoundsSink for BoundsSender {
+    fn apply(&self, bounds: Rectangle) {
         let mut state = self.0.borrow_mut();
         state.last_bounds = Some(bounds);
         if let Some(webview) = &state.webview {
@@ -104,7 +104,7 @@ impl BoundsSender {
         }
     }
 
-    pub(crate) fn refocus_parent(&self) {
+    fn refocus_parent(&self) {
         let state = self.0.borrow();
         if let Some(webview) = &state.webview {
             let _ = webview.focus_parent();
@@ -132,8 +132,8 @@ impl WebViewController {
         }
     }
 
-    pub(crate) fn bounds_sender(&self) -> BoundsSender {
-        BoundsSender(Rc::clone(&self.shared))
+    pub(crate) fn bounds_sender(&self) -> Rc<BoundsSender> {
+        Rc::new(BoundsSender(Rc::clone(&self.shared)))
     }
 
     pub fn create_task<M: Send + 'static>(

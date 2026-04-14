@@ -1827,6 +1827,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "iced_native_surface"
+version = "0.1.0"
+dependencies = [
+ "iced",
+]
+
+[[package]]
 name = "iced_program"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1938,6 +1945,7 @@ version = "0.1.0"
 dependencies = [
  "futures",
  "iced",
+ "iced_native_surface",
  "tracing",
  "tracing-subscriber",
  "windows-sys 0.61.2",
