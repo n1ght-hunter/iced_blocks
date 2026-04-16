@@ -26,6 +26,8 @@ use servo::{
 use tracing::{debug, error, warn};
 use url::Url;
 
+type NewWebViewHandler = Rc<dyn Fn(Url)>;
+
 /// State shared between the delegate and the controller. Lives on the iced
 /// main thread; the only cross-thread field is `latest_frame`, which is
 /// handed to wgpu's `queue.write_texture` via a `Mutex`.
@@ -47,10 +49,10 @@ pub(crate) struct DelegateState {
     /// the popup handle at the end of the call.
     pub(crate) pending_popup_webview: RefCell<Option<WebView>>,
 
-    /// URL captured from a popup's first navigation attempt. The
-    /// controller's `tick()` drains this and fires the embedder's
-    /// `on_new_webview_requested` handler with it.
-    pub(crate) pending_new_url: RefCell<Option<Url>>,
+    /// Handler for `window.open` / `target="_blank"` URLs. Registered
+    /// by the app via `on_new_webview_requested`, fired directly from
+    /// `PopupCaptureDelegate::request_navigation`.
+    pub(crate) new_webview_handler: RefCell<Option<NewWebViewHandler>>,
 
     /// Set by `notify_new_frame_ready`, cleared by the controller's `tick`
     /// after paint+present+read_to_image. Flag-based because painting
@@ -71,6 +73,12 @@ pub(crate) struct DelegateState {
     /// title}`.
     pub(crate) current_url: RefCell<Option<Url>>,
     pub(crate) current_title: RefCell<Option<String>>,
+
+    /// Status text (e.g. link URL on hover), from `notify_status_text_changed`.
+    pub(crate) status_text: RefCell<Option<String>>,
+
+    /// Current page load status, from `notify_load_status_changed`.
+    pub(crate) load_status: Cell<servo::LoadStatus>,
 }
 
 pub(crate) struct WebViewBridge {
@@ -92,6 +100,14 @@ impl WebViewDelegate for WebViewBridge {
 
     fn notify_cursor_changed(&self, _webview: WebView, cursor: Cursor) {
         self.state.current_cursor.set(cursor);
+    }
+
+    fn notify_status_text_changed(&self, _webview: WebView, status: Option<String>) {
+        *self.state.status_text.borrow_mut() = status;
+    }
+
+    fn notify_load_status_changed(&self, _webview: WebView, status: servo::LoadStatus) {
+        self.state.load_status.set(status);
     }
 
     fn notify_crashed(&self, _webview: WebView, reason: String, backtrace: Option<String>) {
@@ -157,11 +173,10 @@ impl WebViewDelegate for PopupCaptureDelegate {
     fn request_navigation(&self, _webview: WebView, navigation_request: NavigationRequest) {
         let url = navigation_request.url.clone();
         navigation_request.deny();
-        *self.state.pending_new_url.borrow_mut() = Some(url);
-        // Drop the popup webview at the end of this callback. Servo
-        // has finished talking to it by the time we return from
-        // `request_navigation`, so releasing the handle here is safe.
         let _ = self.state.pending_popup_webview.borrow_mut().take();
+        if let Some(handler) = self.state.new_webview_handler.borrow().as_ref() {
+            handler(url);
+        }
     }
 }
 

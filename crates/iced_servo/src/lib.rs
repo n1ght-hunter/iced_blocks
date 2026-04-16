@@ -30,3 +30,7 @@ pub use servo::JSValue;
 /// [`InternalError`](servo::JavaScriptEvaluationError::InternalError)
 /// for the case where the controller is dropped mid-evaluation.
 pub use servo::JavaScriptEvaluationError;
+
+/// Page load lifecycle status.
+pub use servo::LoadStatus;
+pub use servo::PrefValue;

@@ -1,0 +1,14 @@
+[package]
+name = "iced_browser"
+version = "0.1.0"
+edition.workspace = true
+publish = false
+
+[dependencies]
+iced = { workspace = true, features = ["advanced", "tokio"] }
+iced_servo.workspace = true
+iced_frame.workspace = true
+dpi.workspace = true
+url.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

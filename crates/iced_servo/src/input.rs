@@ -34,9 +34,7 @@ pub(crate) fn translate_event(
     focused: bool,
     controller: &ServoWebViewController,
 ) -> bool {
-    let Some(webview) = controller.webview() else {
-        return false;
-    };
+    let webview = controller.webview();
     let scale = controller.scale_factor();
 
     match event {
@@ -117,9 +115,9 @@ pub(crate) fn translate_event(
             )));
             true
         }
-        Event::Keyboard(kb) if focused => translate_keyboard(kb, &webview),
-        Event::Touch(t) => translate_touch(t, bounds, &webview),
-        Event::InputMethod(ime) if focused => translate_input_method(ime, &webview),
+        Event::Keyboard(kb) if focused => translate_keyboard(kb, webview),
+        Event::Touch(t) => translate_touch(t, bounds, webview),
+        Event::InputMethod(ime) if focused => translate_input_method(ime, webview),
         Event::Window(window::Event::Focused) => {
             webview.focus();
             true
@@ -269,6 +267,11 @@ fn iced_key_to_servo_key(modified: &ice_key::Key, base: &ice_key::Key) -> ServoK
 }
 
 fn named_to_servo(named: ice_key::Named) -> ServoKey {
+    // W3C spec: Space is Key::Character(" "), not a named key.
+    // iced reports it as Named::Space, so catch it here.
+    if named == ice_key::Named::Space {
+        return ServoKey::Character(" ".into());
+    }
     let debug_name = format!("{named:?}");
     debug_name
         .parse::<ServoNamedKey>()

@@ -113,11 +113,18 @@ where
             state.focused = cursor.is_over(bounds);
         }
 
-        if self
+        let consumed = self
             .source
-            .handle_event(event, bounds, cursor, state.focused)
-        {
+            .handle_event(event, bounds, cursor, state.focused);
+
+        if consumed {
             shell.request_redraw();
+            // Capture keyboard and IME events when focused so other
+            // widgets (e.g. a text input in the URL bar) don't also
+            // process them.
+            if matches!(event, Event::Keyboard(_) | Event::InputMethod(_)) && state.focused {
+                shell.capture_event();
+            }
         }
     }
 

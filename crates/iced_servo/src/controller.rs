@@ -42,12 +42,6 @@ use iced_frame::{Frame, FrameSource, SizeRequestSlot};
 
 use crate::delegate::{DelegateState, ServoBridge, WebViewBridge};
 
-/// Handler fired when page content requests a new webview (e.g. via
-/// `window.open` or a `target="_blank"` link). The URL is the target
-/// the popup would have navigated to; the embedder decides what to do
-/// with it (open a new tab, load in place, ignore, …).
-type NewWebViewHandler = Rc<dyn Fn(Url)>;
-
 /// How long a requested webview size must remain stable (no new
 /// `request_size` call with a different value) before the controller's
 /// `tick` actually applies it. Drag-resize fires resize requests every
@@ -162,6 +156,16 @@ impl ServoRuntime {
         Rc::clone(&self.inner.rendering_context_dyn)
     }
 
+    /// Set a Servo preference at runtime.
+    pub fn set_preference(&self, name: &str, value: servo::PrefValue) {
+        self.inner.servo.set_preference(name, value);
+    }
+
+    /// The default user-agent string Servo uses for this platform.
+    pub fn default_user_agent(&self) -> String {
+        servo::UserAgentPlatform::default().to_user_agent_string()
+    }
+
     /// Iced subscription that drains the Servo wake channel. Mount this
     /// once per app (not once per tab) — all webviews share the same
     /// event loop waker.
@@ -196,10 +200,6 @@ struct Inner {
     /// via the `Viewport::scale_factor()`.
     scale_factor: Cell<f32>,
 
-    /// Handler invoked from `tick()` whenever Servo requests a new
-    /// webview (e.g. a `window.open` / `target="_blank"` link).
-    new_webview_handler: RefCell<Option<NewWebViewHandler>>,
-
     /// Shared slot written to by the shader widget's
     /// `Primitive::prepare` with the current physical-pixel size and
     /// scale factor. `tick()` drains it and forwards the size to Servo.
@@ -230,12 +230,14 @@ impl ServoWebViewController {
             webview: RefCell::new(None),
             rendering_context: RefCell::new(Some(runtime.rendering_context_dyn())),
             pending_popup_webview: RefCell::new(None),
-            pending_new_url: RefCell::new(None),
+            new_webview_handler: RefCell::new(None),
             needs_paint: Cell::new(false),
             current_cursor: Cell::new(servo::Cursor::Default),
             latest_frame: Arc::new(Mutex::new(None)),
             current_url: RefCell::new(None),
             current_title: RefCell::new(None),
+            status_text: RefCell::new(None),
+            load_status: Cell::new(servo::LoadStatus::Started),
         });
 
         let delegate = Rc::new(WebViewBridge {
@@ -264,7 +266,6 @@ impl ServoWebViewController {
                 delegate_state,
                 pending_resize: Cell::new(None),
                 scale_factor: Cell::new(scale_factor),
-                new_webview_handler: RefCell::new(None),
                 size_request: SizeRequestSlot::new(),
             }),
         })
@@ -322,13 +323,12 @@ impl ServoWebViewController {
         })
     }
 
-    /// Navigate the webview to a new URL.
-    pub fn navigate(&self, url: &str) {
-        let Ok(parsed) = Url::parse(url) else {
-            error!("Servo navigate: url failed to parse: {url}");
-            return;
-        };
+    /// Navigate the webview to a new URL. Returns an error if the URL
+    /// fails to parse.
+    pub fn navigate(&self, url: &str) -> Result<(), url::ParseError> {
+        let parsed = Url::parse(url)?;
         self.inner.webview.load(parsed);
+        Ok(())
     }
 
     /// Go back one step in Servo's session history.
@@ -382,7 +382,7 @@ impl ServoWebViewController {
     /// handler can be registered at a time — calling this replaces the
     /// previous handler.
     pub fn on_new_webview_requested(&self, handler: impl Fn(Url) + 'static) {
-        *self.inner.new_webview_handler.borrow_mut() = Some(Rc::new(handler));
+        *self.inner.delegate_state.new_webview_handler.borrow_mut() = Some(Rc::new(handler));
     }
 
     /// Current page title, as reported by the most recent delegate callback.
@@ -400,44 +400,24 @@ impl ServoWebViewController {
             .map(|u| u.to_string())
     }
 
-    /// Latest Servo-reported cursor; the widget's `mouse_interaction` reads
-    /// this to tell iced which OS cursor to show.
-    pub fn current_cursor(&self) -> servo::Cursor {
-        self.inner.delegate_state.current_cursor.get()
+    /// Status text (e.g. the URL of a hovered link).
+    pub fn status_text(&self) -> Option<String> {
+        self.inner.delegate_state.status_text.borrow().clone()
+    }
+
+    /// Current page load status.
+    pub fn load_status(&self) -> servo::LoadStatus {
+        self.inner.delegate_state.load_status.get()
     }
 
     /// Current cached HiDPI scale factor.
-    pub fn scale_factor(&self) -> f32 {
+    pub(crate) fn scale_factor(&self) -> f32 {
         self.inner.scale_factor.get()
     }
 
-    /// Update the cached HiDPI scale factor (call from
-    /// `window::Event::Rescaled`).
-    pub fn set_scale_factor(&self, scale_factor: f32) {
-        self.inner.scale_factor.set(scale_factor);
-    }
-
-    /// Request a resize in physical pixels. The controller's `tick` drains
-    /// this and actually calls `webview.resize`, but only after the same
-    /// size has been pending for at least [`RESIZE_DEBOUNCE`] — see the
-    /// debouncing rationale on [`Inner::pending_resize`].
-    pub fn request_size(&self, size: PhysicalSize<u32>) {
-        // Reset the debounce timer iff the requested size actually
-        // changed; otherwise leave the existing timestamp so a
-        // steady-state size (Length::Fill firing draw() every frame at
-        // the same size) gets applied promptly instead of being
-        // indefinitely deferred.
-        let prior = self.inner.pending_resize.get();
-        match prior {
-            Some((existing, _)) if existing == size => {}
-            _ => self.inner.pending_resize.set(Some((size, Instant::now()))),
-        }
-    }
-
-    /// Returns the controller's current webview handle so widget-side input
-    /// translation can call `notify_input_event`.
-    pub fn webview(&self) -> Option<WebView> {
-        Some(self.inner.webview.clone())
+    /// Returns the webview handle for input forwarding.
+    pub(crate) fn webview(&self) -> &WebView {
+        &self.inner.webview
     }
 
     /// Pump the Servo event loop and, if a new frame became ready
@@ -450,17 +430,6 @@ impl ServoWebViewController {
     /// Call this on every `Tick` produced by the app's subscription.
     pub fn tick(&self) {
         let inner = &self.inner;
-
-        // Fire the `on_new_webview_requested` handler if Servo's
-        // `request_create_new` captured a popup URL since the last tick.
-        // Clone the handler out of the `RefCell` before invoking it so
-        // the embedder can call back into the controller (e.g. to
-        // construct a new one) without re-entrancy trouble.
-        if let Some(url) = inner.delegate_state.pending_new_url.borrow_mut().take()
-            && let Some(handler) = inner.new_webview_handler.borrow().clone()
-        {
-            handler(url);
-        }
 
         // Drain the most recent size request from the shader widget
         // and feed it to the debounced resize path.
