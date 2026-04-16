@@ -3416,6 +3416,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "iced_frame"
+version = "0.1.0"
+dependencies = [
+ "dpi",
+ "iced",
+ "iced_wgpu",
+ "wgpu",
+]
+
+[[package]]
 name = "iced_futures"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3510,13 +3520,11 @@ dependencies = [
  "euclid",
  "futures",
  "iced",
- "iced_wgpu",
- "image",
+ "iced_frame",
  "servo",
  "tracing",
  "tracing-subscriber",
  "url",
- "wgpu",
 ]
 
 [[package]]

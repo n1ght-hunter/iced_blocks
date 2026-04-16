@@ -9,6 +9,7 @@ repository = "https://github.com/n1ght-hunter/iced_blocks"
 
 [workspace.dependencies]
 iced_native_surface = { version = "0.1.0", path = "crates/iced_native_surface" }
+iced_frame = { version = "0.1.0", path = "crates/iced_frame" }
 iced = "0.14"
 iced_wgpu = "0.14"
 wgpu = "27"

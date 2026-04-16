@@ -62,7 +62,7 @@ impl App {
     }
 
     fn view(&self) -> Element<'_, Message> {
-        container(iced_servo::shader(&self.controller))
+        container(iced_servo::frame(&self.controller))
             .width(Length::Fill)
             .height(Length::Fill)
             .into()

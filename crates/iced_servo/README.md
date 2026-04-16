@@ -2,7 +2,7 @@
 
 Embed a [Servo](https://servo.org) webview as a regular widget inside an [Iced](https://github.com/iced-rs/iced) application.
 
-Servo renders into an offscreen `SoftwareRenderingContext`; the resulting frame is read back via `read_to_image`, uploaded to a persistent `wgpu::Texture`, and drawn through a custom `iced::advanced::Widget` that sits in the widget tree like any other element. Mouse, keyboard, touch, IME, and window-focus events flow the other way: iced's native event system delivers them to the widget, which translates and forwards them to Servo via `WebView::notify_input_event`. Cross-platform by construction — there are no platform-specific child windows, WndProcs, `NSView` subviews, or X11/Wayland subsurfaces to maintain.
+Servo renders into an offscreen `SoftwareRenderingContext`; the resulting frame is read back via `read_to_image` and drawn through the generic [`iced_frame`](../iced_frame) widget (a wgpu-textured quad) that sits in the widget tree like any other element. `ServoWebViewController` implements the `FrameSource` trait from `iced_frame`. Mouse, keyboard, touch, IME, and window-focus events flow the other way: iced's native event system delivers them to the widget, which translates and forwards them to Servo via `WebView::notify_input_event`. Cross-platform by construction — there are no platform-specific child windows, WndProcs, `NSView` subviews, or X11/Wayland subsurfaces to maintain.
 
 ## Requirements
 
@@ -26,7 +26,7 @@ When page content calls `window.open` or clicks a `target="_blank"` link, Servo 
 ## Usage
 
 ```rust
-use iced_servo::{ServoRuntime, ServoWebViewController, WebViewConfig, shader};
+use iced_servo::{ServoRuntime, ServoWebViewController, WebViewConfig, frame};
 
 // Once per app:
 let runtime = ServoRuntime::new(dpi::PhysicalSize::new(1024, 768))?;
@@ -45,7 +45,7 @@ controller.on_new_webview_requested(|url| {
 });
 
 // In view():
-shader(&controller).width(Length::Fill).height(Length::Fill)
+frame(&controller).width(Length::Fill).height(Length::Fill)
 
 // In update(), drive the active tab's controller on every tick:
 controller.tick();
@@ -105,7 +105,7 @@ iced_servo = { version = "0.1", features = ["no-wgl"] }
 cargo run -p iced_servo --example basic
 ```
 
-The smallest possible integration: one runtime, one controller, one shader widget. Loads `https://servo.org` and renders it. ~70 lines total.
+The smallest possible integration: one runtime, one controller, one frame widget. Loads `https://servo.org` and renders it. ~70 lines total.
 
 ```sh
 cargo run -p iced_servo --example browser

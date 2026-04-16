@@ -12,11 +12,9 @@
 mod controller;
 mod delegate;
 mod input;
-mod primitive;
-mod widget;
 
 pub use controller::{Content, ServoRuntime, ServoWebViewController, WebViewConfig};
-pub use widget::{ServoWidget, ServoWidgetState, shader};
+pub use iced_frame::{FrameSource, FrameWidget, frame};
 
 /// JavaScript value returned from [`ServoWebViewController::evaluate_javascript`]
 /// and the [`Task`](iced::Task)-based variant. Covers primitives,

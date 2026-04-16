@@ -31,7 +31,6 @@ use futures::{
     stream::{BoxStream, StreamExt},
 };
 use iced::{Subscription, Task};
-use image::RgbaImage;
 use servo::{
     EventLoopWaker, JSValue, JavaScriptEvaluationError, RenderingContext, Servo, ServoBuilder,
     SoftwareRenderingContext, WebView, WebViewBuilder,
@@ -39,8 +38,9 @@ use servo::{
 use tracing::error;
 use url::Url;
 
+use iced_frame::{Frame, FrameSource, SizeRequestSlot};
+
 use crate::delegate::{DelegateState, ServoBridge, WebViewBridge};
-use crate::primitive::SizeRequestSlot;
 
 /// Handler fired when page content requests a new webview (e.g. via
 /// `window.open` or a `target="_blank"` link). The URL is the target
@@ -265,15 +265,9 @@ impl ServoWebViewController {
                 pending_resize: Cell::new(None),
                 scale_factor: Cell::new(scale_factor),
                 new_webview_handler: RefCell::new(None),
-                size_request: Arc::new(Mutex::new(None)),
+                size_request: SizeRequestSlot::new(),
             }),
         })
-    }
-
-    /// Handle to the shared size-request slot written by
-    /// `ServoTexturePrimitive::prepare`.
-    pub(crate) fn size_request_slot(&self) -> SizeRequestSlot {
-        Arc::clone(&self.inner.size_request)
     }
 
     /// Evaluate a JavaScript snippet in the webview and deliver the
@@ -440,12 +434,6 @@ impl ServoWebViewController {
         }
     }
 
-    /// Handle to the shared frame buffer. The widget's `Primitive::prepare`
-    /// consumes the latest `RgbaImage` and uploads it to a `wgpu::Texture`.
-    pub fn frame_slot(&self) -> Arc<Mutex<Option<RgbaImage>>> {
-        Arc::clone(&self.inner.delegate_state.latest_frame)
-    }
-
     /// Returns the controller's current webview handle so widget-side input
     /// translation can call `notify_input_event`.
     pub fn webview(&self) -> Option<WebView> {
@@ -476,7 +464,7 @@ impl ServoWebViewController {
 
         // Drain the most recent size request from the shader widget
         // and feed it to the debounced resize path.
-        if let Some((size, scale)) = inner.size_request.lock().unwrap().take() {
+        if let Some((size, scale)) = inner.size_request.size() {
             if (inner.scale_factor.get() - scale).abs() > f32::EPSILON {
                 inner.scale_factor.set(scale);
                 // Servo no-ops internally if unchanged, but we guard
@@ -529,12 +517,37 @@ impl ServoWebViewController {
                 Point2D::new(0, 0),
                 Point2D::new(size.width as i32, size.height as i32),
             );
-            if let Some(image) = rendering_context.read_to_image(rect) {
-                *inner.delegate_state.latest_frame.lock().unwrap() = Some(image);
+            if let Some(rgba) = rendering_context.read_to_image(rect) {
+                let frame = Frame::new(rgba.into_raw(), size.width, size.height);
+                *inner.delegate_state.latest_frame.lock().unwrap() = Some(frame);
             }
 
             rendering_context.present();
         }
+    }
+}
+
+impl FrameSource for ServoWebViewController {
+    fn frame_slot(&self) -> Arc<Mutex<Option<Frame>>> {
+        Arc::clone(&self.inner.delegate_state.latest_frame)
+    }
+
+    fn size_request_slot(&self) -> SizeRequestSlot {
+        self.inner.size_request.clone()
+    }
+
+    fn cursor(&self) -> iced::mouse::Interaction {
+        crate::input::cursor_to_interaction(self.inner.delegate_state.current_cursor.get())
+    }
+
+    fn handle_event(
+        &self,
+        event: &iced::Event,
+        bounds: iced::Rectangle,
+        cursor: iced::mouse::Cursor,
+        focused: bool,
+    ) -> bool {
+        crate::input::translate_event(event, bounds, cursor, focused, self)
     }
 }
 

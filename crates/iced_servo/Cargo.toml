@@ -8,14 +8,12 @@ description = "Embed a Servo webview inside an Iced application via an offscreen
 
 [dependencies]
 iced = { workspace = true, features = ["advanced", "tokio"] }
-iced_wgpu.workspace = true
+iced_frame.workspace = true
 tracing.workspace = true
 futures.workspace = true
 url.workspace = true
 euclid.workspace = true
-image.workspace = true
 dpi.workspace = true
-wgpu.workspace = true
 
 [dependencies.servo]
 workspace = true

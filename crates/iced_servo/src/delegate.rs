@@ -18,7 +18,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use image::RgbaImage;
+use iced_frame::Frame;
 use servo::{
     Cursor, NavigationRequest, RenderingContext, ServoDelegate, ServoError, WebView,
     WebViewDelegate,
@@ -64,7 +64,7 @@ pub(crate) struct DelegateState {
 
     /// Latest rendered frame pixels. Written by the controller's `tick`
     /// after `read_to_image`, consumed by `Primitive::prepare`.
-    pub(crate) latest_frame: Arc<Mutex<Option<RgbaImage>>>,
+    pub(crate) latest_frame: Arc<Mutex<Option<Frame>>>,
 
     /// Current page URL and title, from the respective delegate callbacks.
     /// The application polls these through `ServoWebViewController::{url,

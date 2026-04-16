@@ -1,8 +1,5 @@
-//! Custom iced `Widget` that drives a [`ServoWebViewController`] and draws
-//! its latest frame through a [`ServoTexturePrimitive`]. Implemented
-//! directly against `iced::advanced::Widget` rather than wrapping
-//! `iced::widget::shader::Shader` / `Program` — the extra indirection
-//! bought us nothing since we always have exactly one program type.
+//! Generic iced [`Widget`] that renders a [`FrameSource`] through a
+//! persistent wgpu texture.
 
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::renderer;
@@ -12,33 +9,34 @@ use iced::mouse;
 use iced::{Element, Event, Length, Rectangle, Size};
 use iced_wgpu::primitive;
 
-use crate::controller::ServoWebViewController;
-use crate::primitive::ServoTexturePrimitive;
+use crate::primitive::FramePrimitive;
+use crate::{Alignment, ContentFit, FilterMode, FrameSource};
 
-/// Per-widget-instance state tracked by iced between events + draws.
-/// Currently just the "logically focused" flag used to gate keyboard
-/// forwarding; set on a left-click inside the bounds, cleared on a
-/// left-click outside.
 #[derive(Default)]
-pub struct ServoWidgetState {
+struct FrameWidgetState {
     focused: bool,
 }
 
-/// Custom iced widget that renders a Servo webview. Clone-cheap
-/// (`ServoWebViewController` is `Rc` inside) but not typically cloned —
-/// constructed fresh by [`shader`] each `view()` call.
-pub struct ServoWidget {
-    controller: ServoWebViewController,
+/// Generic iced widget that renders any [`FrameSource`] through a wgpu
+/// textured quad.
+pub struct FrameWidget<S> {
+    source: S,
     width: Length,
     height: Length,
+    content_fit: ContentFit,
+    alignment: Alignment,
+    filter: FilterMode,
 }
 
-impl ServoWidget {
-    pub fn new(controller: ServoWebViewController) -> Self {
+impl<S: FrameSource> FrameWidget<S> {
+    pub fn new(source: S) -> Self {
         Self {
-            controller,
+            source,
             width: Length::Fill,
             height: Length::Fill,
+            content_fit: ContentFit::default(),
+            alignment: Alignment::default(),
+            filter: FilterMode::default(),
         }
     }
 
@@ -51,18 +49,34 @@ impl ServoWidget {
         self.height = height.into();
         self
     }
+
+    pub fn content_fit(mut self, fit: ContentFit) -> Self {
+        self.content_fit = fit;
+        self
+    }
+
+    pub fn alignment(mut self, alignment: Alignment) -> Self {
+        self.alignment = alignment;
+        self
+    }
+
+    pub fn filter(mut self, filter: FilterMode) -> Self {
+        self.filter = filter;
+        self
+    }
 }
 
-impl<Message, Theme, Renderer> Widget<Message, Theme, Renderer> for ServoWidget
+impl<Message, Theme, Renderer, S> Widget<Message, Theme, Renderer> for FrameWidget<S>
 where
     Renderer: primitive::Renderer,
+    S: FrameSource,
 {
     fn tag(&self) -> tree::Tag {
-        tree::Tag::of::<ServoWidgetState>()
+        tree::Tag::of::<FrameWidgetState>()
     }
 
     fn state(&self) -> tree::State {
-        tree::State::new(ServoWidgetState::default())
+        tree::State::new(FrameWidgetState::default())
     }
 
     fn size(&self) -> Size<Length> {
@@ -93,15 +107,16 @@ where
         _viewport: &Rectangle,
     ) {
         let bounds = layout.bounds();
-        let state = tree.state.downcast_mut::<ServoWidgetState>();
+        let state = tree.state.downcast_mut::<FrameWidgetState>();
 
-        // Click-to-focus: a left-click inside grabs keyboard focus; a
-        // left-click anywhere else releases it.
         if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) = event {
             state.focused = cursor.is_over(bounds);
         }
 
-        if crate::input::translate_event(event, bounds, cursor, state.focused, &self.controller) {
+        if self
+            .source
+            .handle_event(event, bounds, cursor, state.focused)
+        {
             shell.request_redraw();
         }
     }
@@ -114,9 +129,8 @@ where
         _viewport: &Rectangle,
         _renderer: &Renderer,
     ) -> mouse::Interaction {
-        let bounds = layout.bounds();
-        if cursor.is_over(bounds) {
-            crate::input::cursor_to_interaction(self.controller.current_cursor())
+        if cursor.is_over(layout.bounds()) {
+            self.source.cursor()
         } else {
             mouse::Interaction::default()
         }
@@ -135,27 +149,30 @@ where
         let bounds = layout.bounds();
         renderer.draw_primitive(
             bounds,
-            ServoTexturePrimitive {
-                frame_slot: self.controller.frame_slot(),
-                size_request: self.controller.size_request_slot(),
+            FramePrimitive {
+                frame_slot: self.source.frame_slot(),
+                size_request: self.source.size_request_slot(),
                 logical_bounds: bounds.size(),
+                content_fit: self.content_fit,
+                alignment: self.alignment,
+                filter: self.filter,
             },
         );
     }
 }
 
-impl<'a, Message, Theme, Renderer> From<ServoWidget> for Element<'a, Message, Theme, Renderer>
+impl<'a, Message, Theme, Renderer, S> From<FrameWidget<S>> for Element<'a, Message, Theme, Renderer>
 where
     Renderer: primitive::Renderer,
+    S: FrameSource,
 {
-    fn from(widget: ServoWidget) -> Self {
+    fn from(widget: FrameWidget<S>) -> Self {
         Element::new(widget)
     }
 }
 
-/// Build a [`ServoWidget`] bound to the given controller. Defaults to
-/// `Length::Fill` on both axes — override via `.width(...)` /
-/// `.height(...)` on the returned widget if you need a fixed size.
-pub fn shader(controller: &ServoWebViewController) -> ServoWidget {
-    ServoWidget::new(controller.clone())
+/// Build a [`FrameWidget`] with default settings (`Fill`, `Center`,
+/// `Linear`).
+pub fn frame<S: FrameSource>(source: &S) -> FrameWidget<S> {
+    FrameWidget::new(source.clone())
 }

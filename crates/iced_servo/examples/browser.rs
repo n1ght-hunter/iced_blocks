@@ -309,7 +309,7 @@ impl App {
         column![
             tab_strip,
             url_bar,
-            iced_servo::shader(&active_tab.controller)
+            iced_servo::frame(&active_tab.controller)
                 .width(Length::Fill)
                 .height(Length::Fill),
             status,
