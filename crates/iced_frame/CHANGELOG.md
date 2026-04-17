@@ -15,6 +15,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ContentFit` enum: `Fill`, `Contain`, `Cover`, `FitWidth`, `FitHeight`, `None` — CSS-like object-fit behavior.
 - `Alignment` enum: 9 anchor positions (`TopLeft` through `BottomRight`) for when the frame doesn't fill the widget.
 - `FilterMode` enum: `Linear` (smooth) or `Nearest` (sharp pixels) texture sampling.
-- `SizeRequestSlot` newtype for the widget→source size communication channel.
+- `SizeRequestSlot` newtype carrying `WidgetBounds` (physical-pixel position, size, and DPI scale) for the widget→source communication channel. Position is included so native-surface embedders (e.g. WRY) can reposition child windows.
 - UV transform uniform with discard shader for proper clip/letterbox/crop rendering.
 - `examples/demo.rs` — interactive demo with pick lists for all fit/alignment/filter modes and a "Resize to fit" button.

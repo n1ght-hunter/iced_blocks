@@ -115,8 +115,8 @@ impl App {
             Message::Align(a) => self.alignment = a,
             Message::Filter(f) => self.filter = f,
             Message::Resize => {
-                if let Some((size, _)) = self.source.size_request.size() {
-                    let (w, h) = (size.width.max(1), size.height.max(1));
+                if let Some(wb) = self.source.size_request.bounds() {
+                    let (w, h) = (wb.width.max(1), wb.height.max(1));
                     let mut current = self.source.current_size.lock().unwrap();
                     *current = (w, h);
                     *self.source.frame_slot.lock().unwrap() =
@@ -132,8 +132,8 @@ impl App {
         let scale = self
             .source
             .size_request
-            .size()
-            .map(|(_, s)| s)
+            .bounds()
+            .map(|wb| wb.scale_factor)
             .unwrap_or(1.0);
 
         let controls = row![

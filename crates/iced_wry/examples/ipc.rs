@@ -3,7 +3,7 @@ use iced::{
     widget::{column, scrollable, text},
     window,
 };
-use iced_wry::{IpcMessage, WebViewConfig, WebViewController, webview};
+use iced_wry::{IpcMessage, WebViewConfig, WebViewController, frame};
 
 fn main() -> iced::Result {
     tracing_subscriber::fmt::init();
@@ -88,7 +88,7 @@ impl App {
             });
 
         column![
-            webview(&self.controller).height(200),
+            frame(&self.controller.frame_handle()).height(200),
             scrollable(log).height(Fill),
         ]
         .into()

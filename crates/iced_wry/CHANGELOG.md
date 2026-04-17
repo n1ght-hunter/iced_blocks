@@ -9,8 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Extracted `WebViewPlaceholder` into the new [`iced_native_surface`](../iced_native_surface) crate. `iced_wry::WebViewPlaceholder` is now a public type alias for `iced_native_surface::NativeSurfacePlaceholder`, so existing imports keep working.
-- `BoundsSender` now implements `iced_native_surface::BoundsSink`.
+- Widget layout now uses [`iced_frame`](../iced_frame). The native child window is positioned via `SizeRequestSlot::bounds()` which carries physical-pixel position and size. `WebViewController::apply_bounds()` reads it each tick to reposition the WRY child window.
+- Added `WryFrameHandle` — a cloneable `FrameSource` handle for use with `FrameWidget`. Use `frame(&controller.frame_handle())` in `view()`.
+- Removed the old `WebViewPlaceholder` widget and `BoundsSender`.
 
 ## [0.1.0](https://github.com/n1ght-hunter/iced_blocks/releases/tag/iced_wry-v0.1.0) - 2026-03-27
 

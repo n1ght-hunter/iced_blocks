@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex};
 
 use iced::mouse;
 
-pub use primitive::SizeRequestSlot;
+pub use primitive::{SizeRequestSlot, WidgetBounds};
 pub use widget::{FrameWidget, frame};
 
 /// How the frame's content fits within the widget bounds.

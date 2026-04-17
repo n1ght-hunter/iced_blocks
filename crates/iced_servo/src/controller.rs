@@ -433,11 +433,11 @@ impl ServoWebViewController {
 
         // Drain the most recent size request from the shader widget
         // and feed it to the debounced resize path.
-        if let Some((size, scale)) = inner.size_request.size() {
+        if let Some(wb) = inner.size_request.bounds() {
+            let size = wb.size();
+            let scale = wb.scale_factor;
             if (inner.scale_factor.get() - scale).abs() > f32::EPSILON {
                 inner.scale_factor.set(scale);
-                // Servo no-ops internally if unchanged, but we guard
-                // the call anyway to swallow float-compare jitter.
                 inner.webview.set_hidpi_scale_factor(Scale::new(scale));
             }
             match inner.pending_resize.get() {

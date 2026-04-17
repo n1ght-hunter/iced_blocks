@@ -12,24 +12,44 @@ use iced::{Rectangle, Size};
 
 use crate::{Alignment, ContentFit, FilterMode, Frame};
 
-type SizeRequestInner = Arc<Mutex<Option<(PhysicalSize<u32>, f32)>>>;
+/// Physical-pixel bounds reported by the widget each frame.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct WidgetBounds {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+    pub scale_factor: f32,
+}
 
+impl WidgetBounds {
+    pub fn size(&self) -> PhysicalSize<u32> {
+        PhysicalSize::new(self.width, self.height)
+    }
+}
+
+type BoundsInner = Arc<Mutex<Option<WidgetBounds>>>;
+
+/// Widget → source communication channel carrying the widget's
+/// physical-pixel bounds and DPI scale. The widget writes this each
+/// frame from `Primitive::prepare`; the source reads it to know what
+/// size to render at (and where to position a native child window, if
+/// applicable).
 #[derive(Clone, Debug, Default)]
-pub struct SizeRequestSlot(SizeRequestInner);
+pub struct SizeRequestSlot(BoundsInner);
 
 impl SizeRequestSlot {
-    /// Creates a new [`SizeRequestSlot`] with no requested size.
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Returns the current requested size and scale factor, if any.
-    pub fn size(&self) -> Option<(PhysicalSize<u32>, f32)> {
+    /// Returns the current widget bounds, if any.
+    pub fn bounds(&self) -> Option<WidgetBounds> {
         *self.0.lock().unwrap()
     }
 
-    fn set_size(&self, size: PhysicalSize<u32>, scale_factor: f32) {
-        *self.0.lock().unwrap() = Some((size, scale_factor));
+    fn set_bounds(&self, bounds: WidgetBounds) {
+        *self.0.lock().unwrap() = Some(bounds);
     }
 }
 
@@ -286,14 +306,19 @@ impl shader::Primitive for FramePrimitive {
         pipeline: &mut Self::Pipeline,
         _device: &wgpu::Device,
         queue: &wgpu::Queue,
-        _bounds: &Rectangle,
+        bounds: &Rectangle,
         viewport: &Viewport,
     ) {
         let scale = viewport.scale_factor();
         let widget_w = (self.logical_bounds.width * scale).round().max(1.0) as u32;
         let widget_h = (self.logical_bounds.height * scale).round().max(1.0) as u32;
-        self.size_request
-            .set_size(PhysicalSize::new(widget_w, widget_h), scale);
+        self.size_request.set_bounds(WidgetBounds {
+            x: (bounds.x * scale).round() as u32,
+            y: (bounds.y * scale).round() as u32,
+            width: widget_w,
+            height: widget_h,
+            scale_factor: scale,
+        });
 
         if let Some(frame) = self.frame_slot.lock().unwrap().take() {
             pipeline.update_if_needed(&frame, self.filter);

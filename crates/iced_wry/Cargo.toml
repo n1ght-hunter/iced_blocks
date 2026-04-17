@@ -7,7 +7,7 @@ repository.workspace = true
 description = "Embed a WRY webview as a child window inside an Iced application"
 
 [dependencies]
-iced_native_surface.workspace = true
+iced_frame.workspace = true
 iced = { workspace = true, features = ["advanced", "tokio"] }
 wry.workspace = true
 tracing.workspace = true

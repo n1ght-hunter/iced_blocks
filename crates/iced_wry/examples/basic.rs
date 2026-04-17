@@ -1,5 +1,5 @@
 use iced::{Element, Task, widget::column, window};
-use iced_wry::{WebViewConfig, WebViewController, webview};
+use iced_wry::{WebViewConfig, WebViewController, frame};
 
 fn main() -> iced::Result {
     tracing_subscriber::fmt::init();
@@ -48,6 +48,6 @@ impl App {
     }
 
     fn view(&self) -> Element<'_, Message> {
-        column![webview(&self.controller)].into()
+        column![frame(&self.controller.frame_handle())].into()
     }
 }
