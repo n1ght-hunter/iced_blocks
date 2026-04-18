@@ -12,7 +12,8 @@ use std::{
     },
 };
 
-use iced::{Rectangle, Task, window};
+use iced::{Task, mouse, window};
+use iced_frame::{Frame, FrameSource, SizeRequestSlot};
 use tracing::{error, info};
 use wry::{
     Rect, WebViewBuilder,
@@ -83,33 +84,8 @@ impl WebViewConfig {
 
 struct SharedState {
     webview: Option<wry::WebView>,
-    last_bounds: Option<Rectangle>,
-}
-
-#[derive(Clone)]
-pub(crate) struct BoundsSender(Rc<RefCell<SharedState>>);
-
-impl BoundsSender {
-    pub(crate) fn apply(&self, bounds: Rectangle) {
-        let mut state = self.0.borrow_mut();
-        state.last_bounds = Some(bounds);
-        if let Some(webview) = &state.webview {
-            let rect = Rect {
-                position: LogicalPosition::new(bounds.x as f64, bounds.y as f64).into(),
-                size: LogicalSize::new(bounds.width as f64, bounds.height as f64).into(),
-            };
-            if let Err(e) = webview.set_bounds(rect) {
-                error!("Failed to set WebView bounds: {e}");
-            }
-        }
-    }
-
-    pub(crate) fn refocus_parent(&self) {
-        let state = self.0.borrow();
-        if let Some(webview) = &state.webview {
-            let _ = webview.focus_parent();
-        }
-    }
+    size_request: SizeRequestSlot,
+    frame_slot: Arc<Mutex<Option<Frame>>>,
 }
 
 pub struct WebViewController {
@@ -125,15 +101,41 @@ impl WebViewController {
             id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
             shared: Rc::new(RefCell::new(SharedState {
                 webview: None,
-                last_bounds: None,
+                size_request: SizeRequestSlot::new(),
+                frame_slot: Arc::new(Mutex::new(None)),
             })),
             config,
             ipc_rx: None,
         }
     }
 
-    pub(crate) fn bounds_sender(&self) -> BoundsSender {
-        BoundsSender(Rc::clone(&self.shared))
+    /// Get a cloneable handle for use with [`FrameWidget`](iced_frame::FrameWidget).
+    pub fn frame_handle(&self) -> WryFrameHandle {
+        let state = self.shared.borrow();
+        WryFrameHandle {
+            frame_slot: Arc::clone(&state.frame_slot),
+            size_request: state.size_request.clone(),
+        }
+    }
+
+    /// Reposition the native child window to match the widget's
+    /// current bounds. Call this from `update()` on every tick.
+    pub fn apply_bounds(&self) {
+        let state = self.shared.borrow();
+        let Some(webview) = &state.webview else {
+            return;
+        };
+        let Some(wb) = state.size_request.bounds() else {
+            return;
+        };
+        let scale = wb.scale_factor as f64;
+        let rect = Rect {
+            position: LogicalPosition::new(wb.x as f64 / scale, wb.y as f64 / scale).into(),
+            size: LogicalSize::new(wb.width as f64 / scale, wb.height as f64 / scale).into(),
+        };
+        if let Err(e) = webview.set_bounds(rect) {
+            error!("Failed to set WebView bounds: {e}");
+        }
     }
 
     pub fn create_task<M: Send + 'static>(
@@ -175,18 +177,8 @@ impl WebViewController {
     /// Must be called from `update()` after `create_task` resolves with `Ok`.
     pub fn take_staged(&mut self) {
         let webview = STAGED.with(|cell| cell.borrow_mut().remove(&self.id));
-        let mut state = self.shared.borrow_mut();
-        state.webview = webview;
-
-        if let (Some(webview), Some(bounds)) = (&state.webview, state.last_bounds) {
-            let rect = Rect {
-                position: LogicalPosition::new(bounds.x as f64, bounds.y as f64).into(),
-                size: LogicalSize::new(bounds.width as f64, bounds.height as f64).into(),
-            };
-            if let Err(e) = webview.set_bounds(rect) {
-                error!("Failed to set initial WebView bounds: {e}");
-            }
-        }
+        self.shared.borrow_mut().webview = webview;
+        self.apply_bounds();
     }
 
     pub fn set_visible(&self, visible: bool) {
@@ -251,6 +243,40 @@ struct IpcSubData {
 impl Hash for IpcSubData {
     fn hash<H: Hasher>(&self, state: &mut H) {
         Arc::as_ptr(&self.rx).hash(state);
+    }
+}
+
+/// Cloneable handle to a [`WebViewController`]'s rendering state,
+/// suitable for passing to [`FrameWidget`](iced_frame::FrameWidget).
+/// The native child window paints on top of the widget — the frame
+/// slot is always empty and the widget draws nothing visible.
+#[derive(Clone)]
+pub struct WryFrameHandle {
+    frame_slot: Arc<Mutex<Option<Frame>>>,
+    size_request: SizeRequestSlot,
+}
+
+impl FrameSource for WryFrameHandle {
+    fn frame_slot(&self) -> Arc<Mutex<Option<Frame>>> {
+        Arc::clone(&self.frame_slot)
+    }
+
+    fn size_request_slot(&self) -> SizeRequestSlot {
+        self.size_request.clone()
+    }
+
+    fn cursor(&self) -> mouse::Interaction {
+        mouse::Interaction::default()
+    }
+
+    fn handle_event(
+        &self,
+        _event: &iced::Event,
+        _bounds: iced::Rectangle,
+        _cursor: mouse::Cursor,
+        _focused: bool,
+    ) -> bool {
+        false
     }
 }
 

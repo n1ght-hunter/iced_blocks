@@ -6,67 +6,84 @@ on:
       - main
   pull_request:
 
+env:
+  CARGO_TERM_COLOR: always
+  # iced_servo pulls in servo which needs heavy system deps (LLVM,
+  # Python, platform build tools). Exclude from default workspace
+  # checks; it gets its own job below.
+  SERVO_EXCLUDE: --exclude iced_servo --exclude iced_browser
+
 jobs:
 
   test:
-    name: Test Suite
-    runs-on: windows-latest
+    name: Test
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@v6
       - uses: Swatinem/rust-cache@v2
-      - name: Run tests
-        run: cargo test --all-features --workspace
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libglib2.0-dev libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev
+      - run: cargo test --all-features --workspace ${{ env.SERVO_EXCLUDE }}
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: Swatinem/rust-cache@v2
+      - run: rustup component add clippy
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libglib2.0-dev libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev
+      - run: cargo clippy --all-targets --all-features --workspace ${{ env.SERVO_EXCLUDE }} -- -D warnings
 
   rustfmt:
     name: Rustfmt
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-      - uses: Swatinem/rust-cache@v2
-      - name: Check formatting
-        run: cargo fmt --all --check
-
-  clippy:
-    name: Clippy
-    runs-on: windows-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
-      - uses: Swatinem/rust-cache@v2
-      - name: Clippy check
-        run: cargo clippy --all-targets --all-features --workspace -- -D warnings
+      - uses: actions/checkout@v6
+      - run: rustup component add rustfmt
+      - run: cargo fmt --all --check
 
   typos:
     name: Typos
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-      - name: Check spelling
-        uses: crate-ci/typos@master
+      - uses: actions/checkout@v6
+      - uses: crate-ci/typos@master
 
   docs:
     name: Docs
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@v6
       - uses: Swatinem/rust-cache@v2
-      - name: Check documentation
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libglib2.0-dev libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev
+      - run: cargo doc --no-deps --document-private-items --all-features --workspace ${{ env.SERVO_EXCLUDE }} --examples
         env:
           RUSTDOCFLAGS: -D warnings
-        run: cargo doc --no-deps --document-private-items --all-features --workspace --examples
+
+  check-servo:
+    name: Check iced_servo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm-dev libclang-dev clang python3 \
+            build-essential cmake libssl-dev libfreetype6-dev \
+            libfontconfig1-dev
+      - run: cargo check -p iced_servo --examples
