@@ -1,5 +1,7 @@
 # iced_servo
 
+[![crates.io](https://img.shields.io/crates/v/iced_servo.svg)](https://crates.io/crates/iced_servo) [![docs.rs](https://docs.rs/iced_servo/badge.svg)](https://docs.rs/iced_servo)
+
 Embed a [Servo](https://servo.org) webview as a regular widget inside an [Iced](https://github.com/iced-rs/iced) application.
 
 Servo renders into an offscreen `SoftwareRenderingContext`; the resulting frame is read back via `read_to_image` and drawn through the generic [`iced_frame`](../iced_frame) widget (a wgpu-textured quad) that sits in the widget tree like any other element. `ServoWebViewController` implements the `FrameSource` trait from `iced_frame`. Mouse, keyboard, touch, IME, and window-focus events flow the other way: iced's native event system delivers them to the widget, which translates and forwards them to Servo via `WebView::notify_input_event`. Cross-platform by construction — there are no platform-specific child windows, WndProcs, `NSView` subviews, or X11/Wayland subsurfaces to maintain.
