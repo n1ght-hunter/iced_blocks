@@ -1,5 +1,7 @@
 # iced_frame
 
+[![crates.io](https://img.shields.io/crates/v/iced_frame.svg)](https://crates.io/crates/iced_frame) [![docs.rs](https://docs.rs/iced_frame/badge.svg)](https://docs.rs/iced_frame)
+
 [Iced](https://github.com/iced-rs/iced) widget that renders an offscreen RGBA frame buffer as a wgpu-textured quad.
 
 Any source that produces frames — a webview engine, a video decoder, a software renderer — can plug into this widget by implementing the `FrameSource` trait. The widget handles the wgpu pipeline (texture create / resize / upload / draw), click-to-focus state, and redraw requests. The implementor supplies frames, cursor state, and event handling.

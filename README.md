@@ -6,9 +6,11 @@ A collection of reusable widgets and utilities extracted from personal projects.
 
 ## Crates
 
-
+- [`iced_frame`](crates/iced_frame) Generic widget that renders an offscreen RGBA frame buffer as a wgpu texture
+- [`iced_servo`](crates/iced_servo) Embeds a Servo webview inside an Iced application via offscreen rendering
 - [`iced_wry`](crates/iced_wry) Embeds a WRY webview as a child window inside an Iced application
 - [`iced_mc_skin`](crates/iced_mc_skin) Iced shader widget for rendering 3D Minecraft player skins
+- [`iced_browser`](crates/iced_browser) Tabbed web browser built on `iced_servo` is currently just used to test iced_servo (not published)
 
 ## Contributing
 
