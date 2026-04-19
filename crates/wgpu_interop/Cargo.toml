@@ -1,0 +1,54 @@
+[package]
+name = "wgpu_interop"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Import external GPU textures into wgpu as zero-copy shared resources"
+
+[features]
+advanced = []
+
+[dependencies]
+wgpu.workspace = true
+glow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+ash.workspace = true
+bitflags.workspace = true
+
+[target.'cfg(target_os = "windows")'.dependencies]
+# Must match wgpu-hal's windows version for D3D12 type compatibility.
+windows = { workspace = true, features = [
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Direct3D12",
+    "Win32_Graphics_OpenGL",
+    "Win32_Foundation",
+    "Win32_Security",
+] }
+wio.workspace = true
+
+[dev-dependencies]
+pollster.workspace = true
+winit.workspace = true
+iced = { workspace = true, features = ["wgpu"] }
+wgpu = { workspace = true }
+glow = { workspace = true }
+
+[[example]]
+name = "import_winit"
+
+[[example]]
+name = "import_iced"
+
+[target.'cfg(target_os = "windows")'.dev-dependencies]
+windows = { workspace = true, features = [
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Gdi",
+    "Win32_Graphics_OpenGL",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Threading",
+    "Win32_UI_WindowsAndMessaging",
+] }
