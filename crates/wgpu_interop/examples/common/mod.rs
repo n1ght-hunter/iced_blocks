@@ -511,10 +511,53 @@ pub fn create_vulkan_image(seed: u64) -> wgpu_interop::VulkanImage {
     }
 }
 
+/// Creates a Metal texture filled with seeded solid-color pixels.
+///
+/// Extracts the underlying `metal::Device` from the wgpu Metal HAL,
+/// builds a managed-storage RGBA8 texture, and uploads via
+/// `replace_region`.
+///
+/// # Safety
+///
+/// The wgpu `device` must be using the Metal backend.
+#[cfg(target_vendor = "apple")]
+pub unsafe fn create_metal_texture(device: &wgpu::Device, seed: u64) -> wgpu_interop::MetalTexture {
+    unsafe {
+        let hal = device
+            .as_hal::<wgpu::wgc::api::Metal>()
+            .expect("Metal HAL required");
+        let metal_device = hal.raw_device().lock().clone();
+        drop(hal);
+
+        let mtl_desc = metal::TextureDescriptor::new();
+        mtl_desc.set_texture_type(metal::MTLTextureType::D2);
+        mtl_desc.set_pixel_format(metal::MTLPixelFormat::RGBA8Unorm);
+        mtl_desc.set_width(SIZE as u64);
+        mtl_desc.set_height(SIZE as u64);
+        mtl_desc.set_mipmap_level_count(1);
+        mtl_desc.set_sample_count(1);
+        mtl_desc.set_storage_mode(metal::MTLStorageMode::Managed);
+        mtl_desc
+            .set_usage(metal::MTLTextureUsage::ShaderRead | metal::MTLTextureUsage::RenderTarget);
+        let texture = metal_device.new_texture(&mtl_desc);
+
+        let data = solid_pixels(seed);
+        texture.replace_region(
+            metal::MTLRegion::new_2d(0, 0, SIZE as u64, SIZE as u64),
+            0,
+            data.as_ptr() as *const std::ffi::c_void,
+            (SIZE * 4) as u64,
+        );
+
+        wgpu_interop::MetalTexture { texture }
+    }
+}
+
 /// Creates a Vulkan image with pixel data and exports an fd for cross-API import.
 ///
-/// Uses a standalone Vulkan instance/device.
-#[cfg(not(target_os = "windows"))]
+/// Uses a standalone Vulkan instance/device. Only available on Linux
+/// (where `ash::khr::external_memory_fd` is supported).
+#[cfg(target_os = "linux")]
 pub fn create_vulkan_image(seed: u64) -> wgpu_interop::VulkanImage {
     use ash::vk;
 
@@ -994,9 +1037,274 @@ pub fn create_gles_texture(
     let d3d11_device = d3d11_device.unwrap();
     let d3d11_ptr = Interface::into_raw(d3d11_device);
 
-    let interop = unsafe {
-        wgpu_interop::GlInterop::new(d3d11_ptr).expect("GlInterop::new")
-    };
+    let interop = unsafe { wgpu_interop::GlInterop::new(d3d11_ptr).expect("GlInterop::new") };
 
     (name, wgl, interop)
+}
+
+// Platform-abstracted source factories. Each concrete factory below
+// creates a native texture, imports it through `wgpu_interop`, and
+// returns the resulting `wgpu::Texture`. `platform_sources()` returns
+// the set relevant to the current OS so the example loops with no
+// platform awareness.
+
+use std::sync::Arc;
+
+use wgpu_interop::{DeviceInterop, TextureSourceTypes};
+
+/// A platform-native texture source that can be imported into wgpu.
+pub trait SourceFactory: Send + Sync + 'static {
+    /// Human-readable label (e.g. `"MetalTexture"`). Rendered by the examples.
+    fn label(&self) -> &str;
+
+    /// The wgpu source type this factory produces. Used to filter
+    /// factories against `device.supported_sources()` so a factory
+    /// targeting a different backend (e.g. `MetalTexture` on a wgpu
+    /// Vulkan device) is silently skipped.
+    fn required_source(&self) -> TextureSourceTypes;
+
+    /// Create the native resource and import it as a `wgpu::Texture`.
+    ///
+    /// # Safety
+    ///
+    /// `device` must be using the wgpu backend appropriate for this factory.
+    unsafe fn import(&self, device: &wgpu::Device) -> wgpu::Texture;
+}
+
+/// Factories appropriate for the wgpu backend on the current OS.
+///
+/// Returns the full set; the example filters by what the active wgpu
+/// device's backend supports so you can run the same example with
+/// e.g. `WGPU_BACKEND=vulkan` and only the Vulkan-compatible factories
+/// fire.
+pub fn platform_sources() -> Vec<Arc<dyn SourceFactory>> {
+    #[cfg(target_vendor = "apple")]
+    {
+        vec![
+            Arc::new(MetalFactory { seed: 0x4D37 }),
+            Arc::new(IOSurfaceFactory { seed: 0x105F }),
+        ]
+    }
+    #[cfg(target_os = "windows")]
+    {
+        vec![
+            Arc::new(D3D12Factory { seed: 0xD3D12 }),
+            Arc::new(D3D11Factory { seed: 0xD3D11 }),
+            Arc::new(VulkanFactory { seed: 0x71CA }),
+            Arc::new(GlesFactory { seed: 0x61E5 }),
+        ]
+    }
+    #[cfg(target_os = "linux")]
+    {
+        vec![Arc::new(VulkanFactory { seed: 0x71CA })]
+    }
+}
+
+#[cfg(target_vendor = "apple")]
+pub struct MetalFactory {
+    pub seed: u64,
+}
+
+#[cfg(target_vendor = "apple")]
+impl SourceFactory for MetalFactory {
+    fn label(&self) -> &str {
+        "MetalTexture"
+    }
+
+    fn required_source(&self) -> TextureSourceTypes {
+        TextureSourceTypes::MetalTexture
+    }
+
+    unsafe fn import(&self, device: &wgpu::Device) -> wgpu::Texture {
+        let source = unsafe { create_metal_texture(device, self.seed) };
+        unsafe {
+            device
+                .import_external_texture(source, &texture_desc())
+                .expect("import MetalTexture")
+        }
+    }
+}
+
+/// IOSurface-backed source — works on both Metal and (with
+/// `vulkan-portability`) MoltenVK backends.
+#[cfg(target_vendor = "apple")]
+pub struct IOSurfaceFactory {
+    pub seed: u64,
+}
+
+#[cfg(target_vendor = "apple")]
+impl SourceFactory for IOSurfaceFactory {
+    fn label(&self) -> &str {
+        "IOSurfaceTexture"
+    }
+
+    fn required_source(&self) -> TextureSourceTypes {
+        TextureSourceTypes::IOSurfaceTexture
+    }
+
+    unsafe fn import(&self, device: &wgpu::Device) -> wgpu::Texture {
+        // CPU-fill an IOSurface with the seed's solid color.
+        let surface = wgpu_interop::create_io_surface_bgra(SIZE, SIZE).expect("IOSurface create");
+        fill_iosurface_solid(&surface, self.seed);
+
+        // Use a BGRA-format descriptor — IOSurface is BGRA-laid-out.
+        let desc = wgpu::TextureDescriptor {
+            label: Some("imported IOSurface"),
+            size: wgpu::Extent3d {
+                width: SIZE,
+                height: SIZE,
+                depth_or_array_layers: 1,
+            },
+            format: wgpu::TextureFormat::Bgra8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            view_formats: &[],
+        };
+        unsafe {
+            device
+                .import_external_texture(wgpu_interop::IOSurfaceTexture::new(surface), &desc)
+                .expect("import IOSurfaceTexture")
+        }
+    }
+}
+
+#[cfg(target_vendor = "apple")]
+fn fill_iosurface_solid(surface: &objc2_io_surface::IOSurfaceRef, seed: u64) {
+    use objc2_io_surface::IOSurfaceLockOptions;
+
+    // BGRA layout; reuse the same hash as `solid_pixels`.
+    let hash = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+    let r = hash as u8;
+    let g = (hash >> 8) as u8;
+    let b = (hash >> 16) as u8;
+    let pixel = [b, g, r, 255]; // BGRA
+
+    unsafe {
+        let kr = surface.lock(IOSurfaceLockOptions::empty(), std::ptr::null_mut());
+        assert_eq!(kr, 0, "IOSurfaceLock failed: {kr}");
+
+        let row_bytes = surface.bytes_per_row();
+        let dst = surface.base_address().as_ptr() as *mut u8;
+        for y in 0..SIZE as usize {
+            for x in 0..SIZE as usize {
+                let p = dst.add(y * row_bytes + x * 4);
+                std::ptr::copy_nonoverlapping(pixel.as_ptr(), p, 4);
+            }
+        }
+
+        let kr = surface.unlock(IOSurfaceLockOptions::empty(), std::ptr::null_mut());
+        assert_eq!(kr, 0, "IOSurfaceUnlock failed: {kr}");
+    }
+}
+
+#[cfg(target_os = "windows")]
+pub struct D3D12Factory {
+    pub seed: u64,
+}
+
+#[cfg(target_os = "windows")]
+impl SourceFactory for D3D12Factory {
+    fn label(&self) -> &str {
+        "D3D12Resource"
+    }
+
+    fn required_source(&self) -> TextureSourceTypes {
+        TextureSourceTypes::D3D12Resource
+    }
+
+    unsafe fn import(&self, device: &wgpu::Device) -> wgpu::Texture {
+        let source = unsafe { create_d3d12_resource(device, self.seed) };
+        unsafe {
+            device
+                .import_external_texture(source, &texture_desc())
+                .expect("import D3D12Resource")
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+pub struct D3D11Factory {
+    pub seed: u64,
+}
+
+#[cfg(target_os = "windows")]
+impl SourceFactory for D3D11Factory {
+    fn label(&self) -> &str {
+        "D3D11SharedHandle"
+    }
+
+    fn required_source(&self) -> TextureSourceTypes {
+        TextureSourceTypes::D3D11SharedHandle
+    }
+
+    unsafe fn import(&self, device: &wgpu::Device) -> wgpu::Texture {
+        let handle = create_d3d11_shared_handle(self.seed);
+        let tex = unsafe {
+            device
+                .import_external_texture(
+                    wgpu_interop::D3D11SharedHandle { handle },
+                    &texture_desc(),
+                )
+                .expect("import D3D11SharedHandle")
+        };
+        unsafe { Foundation::CloseHandle(handle) }.ok();
+        tex
+    }
+}
+
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+pub struct VulkanFactory {
+    pub seed: u64,
+}
+
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+impl SourceFactory for VulkanFactory {
+    fn label(&self) -> &str {
+        "VulkanImage"
+    }
+
+    fn required_source(&self) -> TextureSourceTypes {
+        TextureSourceTypes::VulkanImage
+    }
+
+    unsafe fn import(&self, device: &wgpu::Device) -> wgpu::Texture {
+        let source = create_vulkan_image(self.seed);
+        unsafe {
+            device
+                .import_external_texture(source, &texture_desc())
+                .expect("import VulkanImage")
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+pub struct GlesFactory {
+    pub seed: u64,
+}
+
+#[cfg(target_os = "windows")]
+impl SourceFactory for GlesFactory {
+    fn label(&self) -> &str {
+        "GlesTexture"
+    }
+
+    fn required_source(&self) -> TextureSourceTypes {
+        TextureSourceTypes::GlesTexture
+    }
+
+    unsafe fn import(&self, device: &wgpu::Device) -> wgpu::Texture {
+        let (name, wgl_ctx, interop) = create_gles_texture(self.seed);
+        let source = wgpu_interop::GlesTexture {
+            gl: &wgl_ctx.gl,
+            name,
+            interop: Some(&interop),
+        };
+        unsafe {
+            device
+                .import_external_texture(source, &texture_desc())
+                .expect("import GlesTexture")
+        }
+    }
 }

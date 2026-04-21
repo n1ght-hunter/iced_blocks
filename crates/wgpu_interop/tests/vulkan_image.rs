@@ -1,3 +1,5 @@
+#![cfg(any(target_os = "windows", target_os = "linux"))]
+
 mod common;
 
 use ash::vk;

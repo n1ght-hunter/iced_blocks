@@ -6,12 +6,14 @@ use crate::{ImportError, TextureSource, TextureSourceTypes};
 
 impl BackendImport for wgpu::wgc::api::Vulkan {
     fn supported_sources() -> TextureSourceTypes {
-        let mut types = TextureSourceTypes::VulkanImage;
         #[cfg(any(target_os = "windows", target_os = "linux"))]
         {
-            types |= TextureSourceTypes::GlesTexture;
+            TextureSourceTypes::VulkanImage | TextureSourceTypes::GlesTexture
         }
-        types
+        #[cfg(target_vendor = "apple")]
+        {
+            TextureSourceTypes::IOSurfaceTexture
+        }
     }
 
     unsafe fn import(
@@ -21,29 +23,92 @@ impl BackendImport for wgpu::wgc::api::Vulkan {
         desc: &TextureDescriptor<'_>,
     ) -> Result<Texture, ImportError> {
         match source {
+            #[cfg(any(target_os = "windows", target_os = "linux"))]
             TextureSource::VulkanImage(img) => unsafe {
                 import_vulkan_image(device, hal, &img, desc)
             },
-            TextureSource::GlesTexture(tex) => {
-                #[cfg(any(target_os = "windows", target_os = "linux"))]
-                {
-                    unsafe {
-                        super::gles::import_gles_via_blit(
-                            device,
-                            &tex,
-                            desc.size.width,
-                            desc.size.height,
-                        )
-                    }
-                }
-                #[cfg(not(any(target_os = "windows", target_os = "linux")))]
-                {
-                    let _ = tex;
-                    Err(ImportError::Unsupported)
-                }
-            }
+            #[cfg(any(target_os = "windows", target_os = "linux"))]
+            TextureSource::GlesTexture(tex) => unsafe {
+                super::gles::import_gles_via_blit(device, &tex, desc.size.width, desc.size.height)
+            },
+            #[cfg(target_vendor = "apple")]
+            TextureSource::IOSurfaceTexture(s) => unsafe {
+                import_iosurface_as_vkimage(device, hal, &s.surface, s.plane, desc)
+            },
             _ => Err(ImportError::Unsupported),
         }
+    }
+}
+
+/// Import an `IOSurface` as a wgpu Vulkan texture via MoltenVK's
+/// `VK_EXT_metal_objects` extension.
+///
+/// `VkImportMetalIOSurfaceInfoEXT` has no plane field — the whole
+/// IOSurface is bound as the image's backing memory. Multi-plane
+/// IOSurfaces (e.g. NV12) aren't representable through this single
+/// import; callers wanting per-plane VkImages must `vkCreateImage`
+/// once per plane externally. The `plane` argument is therefore
+/// ignored on Vulkan and only meaningful for the Metal backend.
+///
+/// # Safety
+///
+/// `desc` must accurately describe `surface`'s format and size. The
+/// wgpu `device` must be using the Vulkan backend on a MoltenVK
+/// driver. Caller is responsible for ensuring `VK_EXT_metal_objects`
+/// is available on the device.
+#[cfg(target_vendor = "apple")]
+unsafe fn import_iosurface_as_vkimage(
+    device: &WgpuDevice,
+    hal: &<wgpu::wgc::api::Vulkan as wgpu::hal::Api>::Device,
+    surface: &objc2_io_surface::IOSurfaceRef,
+    _plane: u32,
+    desc: &TextureDescriptor<'_>,
+) -> Result<Texture, ImportError> {
+    let vk_format = texture_format_to_vk(desc.format);
+    let vk_usage = vk_image_usage(desc.usage);
+    let iosurface_ptr = surface as *const objc2_io_surface::IOSurfaceRef as *mut std::ffi::c_void;
+
+    unsafe {
+        let vulkan_device = hal.raw_device().clone();
+
+        let mut import_info = vk::ImportMetalIOSurfaceInfoEXT::default().io_surface(iosurface_ptr);
+
+        let image = vulkan_device
+            .create_image(
+                &vk::ImageCreateInfo::default()
+                    .image_type(vk::ImageType::TYPE_2D)
+                    .format(vk_format)
+                    .extent(vk::Extent3D {
+                        width: desc.size.width,
+                        height: desc.size.height,
+                        depth: 1,
+                    })
+                    .mip_levels(desc.mip_level_count)
+                    .array_layers(1)
+                    .samples(vk::SampleCountFlags::TYPE_1)
+                    .tiling(vk::ImageTiling::OPTIMAL)
+                    .usage(vk_usage)
+                    .sharing_mode(vk::SharingMode::EXCLUSIVE)
+                    .initial_layout(vk::ImageLayout::UNDEFINED)
+                    .push_next(&mut import_info),
+                None,
+            )
+            .map_err(|e| ImportError::Platform(format!("vkCreateImage (IOSurface): {e}")))?;
+
+        // MoltenVK auto-binds IOSurface-backed memory at vkCreateImage
+        // time when `VkImportMetalIOSurfaceInfoEXT` is in the pNext
+        // chain. No vkBindImageMemory needed.
+
+        let vk_device_clone = vulkan_device.clone();
+        wrap_image(
+            device,
+            hal,
+            image,
+            desc,
+            Some(Box::new(move || {
+                vk_device_clone.destroy_image(image, None);
+            })),
+        )
     }
 }
 
@@ -51,10 +116,12 @@ impl BackendImport for wgpu::wgc::api::Vulkan {
 ///
 /// On Linux, imports via `VK_KHR_external_memory_fd` (opaque fd).
 /// On Windows, imports via `VK_KHR_external_memory_win32` (opaque NTHANDLE).
+/// Not available on Apple — use `IOSurfaceTexture` instead.
 ///
 /// # Safety
 ///
 /// `desc` must accurately describe the image behind the handle.
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 pub unsafe fn import_vulkan_image(
     device: &WgpuDevice,
     hal: &<wgpu::wgc::api::Vulkan as wgpu::hal::Api>::Device,
@@ -215,7 +282,7 @@ pub unsafe fn wrap_image(
 /// # Safety
 ///
 /// `desc` must be a valid texture descriptor for the created image.
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "linux")]
 pub unsafe fn create_exportable_image_fd(
     device: &WgpuDevice,
     desc: &TextureDescriptor<'_>,

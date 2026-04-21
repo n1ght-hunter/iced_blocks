@@ -75,9 +75,7 @@ fn cross_backend_blit_on_dx12() {
     let d3d11_device = common::create_d3d11_device();
     let d3d11_ptr = Interface::into_raw(d3d11_device);
 
-    let interop = unsafe {
-        wgpu_interop::GlInterop::new(d3d11_ptr).expect("GlInterop::new")
-    };
+    let interop = unsafe { wgpu_interop::GlInterop::new(d3d11_ptr).expect("GlInterop::new") };
 
     let desc = common::test_desc(
         TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT | TextureUsages::COPY_SRC,

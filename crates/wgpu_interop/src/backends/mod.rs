@@ -7,6 +7,11 @@
 #[cfg(target_os = "windows")]
 pub mod dx12;
 
+#[cfg(any(
+    target_os = "windows",
+    target_os = "linux",
+    all(target_vendor = "apple", feature = "vulkan-portability"),
+))]
 pub mod vulkan;
 
 #[cfg(target_vendor = "apple")]
@@ -37,6 +42,7 @@ pub(crate) trait BackendImport: wgpu::hal::Api {
 }
 
 /// Map `wgpu::TextureUsages` to `wgpu::hal::TextureUses`.
+#[cfg_attr(target_vendor = "apple", allow(dead_code))]
 pub fn hal_usage(usage: TextureUsages) -> wgpu::TextureUses {
     let mut hal = wgpu::TextureUses::empty();
     if usage.contains(TextureUsages::TEXTURE_BINDING) {

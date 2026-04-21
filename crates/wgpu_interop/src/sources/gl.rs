@@ -110,7 +110,6 @@ const GL_HANDLE_TYPE_OPAQUE_FD_EXT: u32 = 0x9586;
 const GL_RGBA8: u32 = 0x8058;
 
 impl GlInterop {
-
     /// Create a new GL interop context on Windows.
     ///
     /// Uses `WGL_NV_DX_interop2` to register D3D11 textures with GL.
@@ -481,13 +480,7 @@ impl GlInterop {
                 0,
             );
 
-            crate::blit_framebuffer(
-                gl,
-                read_fbo,
-                Some(draw_fbo),
-                width as i32,
-                height as i32,
-            )?;
+            crate::blit_framebuffer(gl, read_fbo, Some(draw_fbo), width as i32, height as i32)?;
 
             gl.delete_framebuffer(draw_fbo);
         }

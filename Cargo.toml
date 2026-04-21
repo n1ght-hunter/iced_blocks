@@ -32,6 +32,11 @@ windows-sys = { version = "0.61", features = ["Win32_UI_WindowsAndMessaging", "W
 wgpu-hal = "27"
 wio = "0.2"
 ash = "0.38"
+# Apple / macOS GL↔Metal interop. `metal` must match the version vendored
+# by wgpu-hal 27 so `metal::Texture` is type-identical across crate boundaries.
+metal = "0.32"
+objc2-io-surface = { version = "0.3", features = ["IOSurface", "IOSurfaceRef", "IOSurfaceAPI", "objc2", "objc2-core-foundation"] }
+objc2-core-foundation = "0.3"
 surfman = "0.11"
 gleam = "0.15"
 glow = "0.16"

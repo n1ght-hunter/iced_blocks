@@ -1,10 +1,15 @@
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 use std::num::NonZeroU32;
 
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 use wgpu::{Device as WgpuDevice, Texture, TextureDescriptor};
 
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 use super::BackendImport;
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 use crate::{ImportError, TextureSource, TextureSourceTypes};
 
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 impl BackendImport for wgpu::wgc::api::Gles {
     fn supported_sources() -> TextureSourceTypes {
         TextureSourceTypes::GlesTexture
@@ -69,6 +74,7 @@ pub unsafe fn import_gles_via_blit(
 ///
 /// `desc` must accurately describe the GL texture `name`. The wgpu
 /// `device` must be using the GLES backend.
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 pub unsafe fn wrap_gl_texture(
     device: &WgpuDevice,
     hal_device: &<wgpu::wgc::api::Gles as wgpu::hal::Api>::Device,

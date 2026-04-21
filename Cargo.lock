@@ -5555,6 +5555,7 @@ dependencies = [
  "libc",
  "objc2 0.6.4",
  "objc2-core-foundation",
+ "objc2-foundation 0.3.2",
 ]
 
 [[package]]
@@ -11035,6 +11036,9 @@ dependencies = [
  "bitflags 2.11.0",
  "glow",
  "iced",
+ "metal",
+ "objc2-core-foundation",
+ "objc2-io-surface",
  "pollster",
  "thiserror 2.0.18",
  "tracing",

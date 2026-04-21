@@ -8,6 +8,19 @@ description = "Import external GPU textures into wgpu as zero-copy shared resour
 
 [features]
 advanced = []
+# Enable wgpu's Vulkan-via-MoltenVK backend on Apple platforms, plus the
+# `wgpu_interop` Vulkan backend impl on Apple. Off by default — wgpu on
+# macOS defaults to Metal. Opt in only if you need Vulkan ↔ Metal interop
+# (via `IOSurfaceTexture`) on Apple Silicon.
+vulkan-portability = ["wgpu/vulkan-portability"]
+
+[lints.rust]
+# `objc` 0.2 (transitively via `metal` 0.32) emits `cfg(feature = "cargo-clippy")`
+# inside its `sel_impl!` macro expansion, which hits our crate and trips
+# `unexpected_cfgs`. Whitelist just that cfg.
+unexpected_cfgs = { level = "warn", check-cfg = [
+    'cfg(feature, values("cargo-clippy"))',
+] }
 
 [dependencies]
 wgpu.workspace = true
@@ -30,6 +43,12 @@ windows = { workspace = true, features = [
 ] }
 wio.workspace = true
 
+[target.'cfg(target_vendor = "apple")'.dependencies]
+# Must match wgpu-hal 27's vendored `metal` version for cross-crate type compatibility.
+metal.workspace = true
+objc2-io-surface.workspace = true
+objc2-core-foundation.workspace = true
+
 [dev-dependencies]
 pollster.workspace = true
 winit.workspace = true
@@ -43,6 +62,13 @@ name = "import_winit"
 [[example]]
 name = "import_iced"
 
+[[example]]
+name = "iosurface_offscreen"
+
+[[example]]
+name = "cross_backend"
+required-features = ["vulkan-portability"]
+
 [target.'cfg(target_os = "windows")'.dev-dependencies]
 windows = { workspace = true, features = [
     "Win32_Graphics_Direct3D",
@@ -52,3 +78,6 @@ windows = { workspace = true, features = [
     "Win32_System_Threading",
     "Win32_UI_WindowsAndMessaging",
 ] }
+
+[target.'cfg(target_vendor = "apple")'.dev-dependencies]
+metal.workspace = true

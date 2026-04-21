@@ -15,8 +15,10 @@ Bridges wgpu with other GPU APIs using platform-specific memory sharing:
 | `Vulkan` | `GlesTexture` | Windows | WGL_NV_DX_interop2 → NTHANDLE → Vulkan | planned |
 | `Vulkan` | `D3D11SharedHandle` / `D3D11Interop` | Windows | NTHANDLE → `VK_KHR_external_memory_win32` | planned |
 | `GLES` | `GlesTexture` | All | Direct GL texture wrap via HAL | ✅ |
-| `Metal` | `MetalTexture` | macOS | IOSurface | planned |
-| `Metal` | `GlesTexture` | macOS | IOSurface-backed GL texture → Metal | planned |
+| `Metal` | `MetalTexture` | macOS | Direct Metal HAL wrap | ✅ |
+| `Metal` | `IOSurfaceTexture` | macOS | `newTextureWithDescriptor:iosurface:plane:` | ✅ |
+| `Metal` | `GlesTexture` | macOS | IOSurface-backed GL texture → Metal | ✅ |
+| `Vulkan` | `IOSurfaceTexture` | macOS (MoltenVK) | `VK_EXT_metal_objects` → `VkImportMetalIOSurfaceInfoEXT` | ✅ feature `vulkan-portability` |
 
 ## Usage
 
@@ -50,3 +52,8 @@ cargo nextest run -p wgpu_interop
 ## Feature flags
 
 - **`advanced`** — Exposes the `backends` module with low-level wrapping functions (`wrap_resource`, `wrap_image`, etc.) for direct HAL-level access.
+- **`vulkan-portability`** — On Apple targets, enables wgpu's Vulkan-via-MoltenVK backend and the matching `wgpu_interop` Vulkan import path. Off by default; opt in only when you need Vulkan ↔ Metal interop on Apple Silicon. Caller must have MoltenVK installed at runtime; the Vulkan loader env vars (`DYLD_LIBRARY_PATH`, `VK_ICD_FILENAMES`) need to point at it.
+
+## Cross-backend interop on Apple Silicon
+
+The `IOSurfaceTexture` source is the common substrate between Metal and Vulkan/MoltenVK on macOS — wgpu-on-Vulkan can render into an `IOSurface`, and wgpu-on-Metal imports the same `IOSurface` zero-copy. See `examples/cross_backend.rs`.

@@ -1,20 +1,19 @@
 //! Imports textures from all available source types and renders them
 //! side-by-side in a winit window with labels.
 //!
-//! On DX12: D3D12Resource + D3D11SharedHandle + VulkanImage + GlesTexture.
+//! - **Windows (DX12)**: D3D12Resource + D3D11SharedHandle + VulkanImage + GlesTexture
+//! - **macOS (Metal)**: MetalTexture
+//! - **Linux (Vulkan)**: VulkanImage
 //!
 //! ```bash
 //! cargo run -p wgpu_interop --example import_winit
 //! ```
-
-#![cfg(target_os = "windows")]
 
 #[path = "common/mod.rs"]
 mod common;
 
 use std::sync::Arc;
 
-use wgpu_interop::{DeviceInterop, TextureSourceTypes};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, EventLoop};
@@ -214,8 +213,11 @@ impl ApplicationHandler for App {
                 .expect("create window"),
         );
 
+        // Honor `WGPU_BACKEND=vulkan` etc. so the same example can run
+        // on either Metal or MoltenVK on macOS.
+        let backends = wgpu::Backends::from_env().unwrap_or(wgpu::Backends::PRIMARY);
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::DX12,
+            backends,
             ..Default::default()
         });
 
@@ -233,9 +235,7 @@ impl ApplicationHandler for App {
             pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default()))
                 .expect("request device");
 
-        let supported = device.supported_sources();
         eprintln!("Backend: {:?}", adapter.get_info().backend);
-        eprintln!("Supported sources: {:#010b}", supported.bits());
 
         let size = window.inner_size();
         let config = surface
@@ -288,101 +288,33 @@ impl ApplicationHandler for App {
             })
         };
 
-        let desc = common::texture_desc();
+        let supported = wgpu_interop::DeviceInterop::supported_sources(&device);
+        eprintln!("Supported sources: {:#010b}", supported.bits());
+
         let mut blocks = Vec::new();
-
-        if supported.contains(TextureSourceTypes::D3D12Resource) {
-            let source = unsafe { common::create_d3d12_resource(&device, 0xD3D12) };
-            let tex = unsafe {
-                device
-                    .import_external_texture(source, &desc)
-                    .expect("import D3D12Resource")
-            };
-            let tex_view = tex.create_view(&Default::default());
-
-            let (label_tex, label_tex_w, label_tex_h) =
-                render_text_texture(&device, &queue, "D3D12Resource");
-            let label_view = label_tex.create_view(&Default::default());
-
-            blocks.push(Block {
-                label_bind_group: make_bind_group("label_d3d12", &label_view),
-                label_tex_w,
-                label_tex_h,
-                texture_bind_group: make_bind_group("bg_d3d12", &tex_view),
-            });
-            eprintln!("  Imported D3D12Resource");
-        }
-
-        if supported.contains(TextureSourceTypes::D3D11SharedHandle) {
-            let handle = common::create_d3d11_shared_handle(0xD3D11);
-            let tex = unsafe {
-                device
-                    .import_external_texture(wgpu_interop::D3D11SharedHandle { handle }, &desc)
-                    .expect("import D3D11SharedHandle")
-            };
-            unsafe { windows::Win32::Foundation::CloseHandle(handle) }.ok();
-            let tex_view = tex.create_view(&Default::default());
-
-            let (label_tex, label_tex_w, label_tex_h) =
-                render_text_texture(&device, &queue, "D3D11SharedHandle");
-            let label_view = label_tex.create_view(&Default::default());
-
-            blocks.push(Block {
-                label_bind_group: make_bind_group("label_d3d11", &label_view),
-                label_tex_w,
-                label_tex_h,
-                texture_bind_group: make_bind_group("bg_d3d11", &tex_view),
-            });
-            eprintln!("  Imported D3D11SharedHandle");
-        }
-
-        if supported.contains(TextureSourceTypes::VulkanImage) {
-            let source = common::create_vulkan_image(0x71CA);
-            let tex = unsafe {
-                device
-                    .import_external_texture(source, &desc)
-                    .expect("import VulkanImage")
-            };
-            let tex_view = tex.create_view(&Default::default());
-
-            let (label_tex, label_tex_w, label_tex_h) =
-                render_text_texture(&device, &queue, "VulkanImage");
-            let label_view = label_tex.create_view(&Default::default());
-
-            blocks.push(Block {
-                label_bind_group: make_bind_group("label_vulkan", &label_view),
-                label_tex_w,
-                label_tex_h,
-                texture_bind_group: make_bind_group("bg_vulkan", &tex_view),
-            });
-            eprintln!("  Imported VulkanImage");
-        }
-
-        if supported.contains(TextureSourceTypes::GlesTexture) {
-            let (name, _wgl_ctx, interop) = common::create_gles_texture(0x61E5);
-            let source = wgpu_interop::GlesTexture {
-                gl: &_wgl_ctx.gl,
-                name,
-                interop: Some(&interop),
-            };
-            match unsafe { device.import_external_texture(source, &desc) } {
-                Ok(tex) => {
-                    let tex_view = tex.create_view(&Default::default());
-
-                    let (label_tex, label_tex_w, label_tex_h) =
-                        render_text_texture(&device, &queue, "GlesTexture");
-                    let label_view = label_tex.create_view(&Default::default());
-
-                    blocks.push(Block {
-                        label_bind_group: make_bind_group("label_gles", &label_view),
-                        label_tex_w,
-                        label_tex_h,
-                        texture_bind_group: make_bind_group("bg_gles", &tex_view),
-                    });
-                    eprintln!("  Imported GlesTexture");
-                }
-                Err(e) => eprintln!("  Skipping GlesTexture: {e}"),
+        for factory in common::platform_sources() {
+            if !supported.contains(factory.required_source()) {
+                eprintln!(
+                    "  Skipping {} (not supported by {:?})",
+                    factory.label(),
+                    adapter.get_info().backend
+                );
+                continue;
             }
+            let tex = unsafe { factory.import(&device) };
+            let tex_view = tex.create_view(&Default::default());
+
+            let (label_tex, label_tex_w, label_tex_h) =
+                render_text_texture(&device, &queue, factory.label());
+            let label_view = label_tex.create_view(&Default::default());
+
+            blocks.push(Block {
+                label_bind_group: make_bind_group("label", &label_view),
+                label_tex_w,
+                label_tex_h,
+                texture_bind_group: make_bind_group("bg", &tex_view),
+            });
+            eprintln!("  Imported {}", factory.label());
         }
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {

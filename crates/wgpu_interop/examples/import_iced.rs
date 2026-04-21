@@ -1,44 +1,24 @@
 //! Iced example: imports textures from available source types and
 //! displays them as labeled `shader::Program` widgets.
 //!
-//! On DX12: D3D12Resource + D3D11SharedHandle + VulkanImage + GlesTexture.
-//!
-//! ```bash
-//! cargo run -p wgpu_interop --example import_iced
-//! ```
-
-#![cfg(target_os = "windows")]
+//! Source set depends on OS — see `common::platform_sources()`:
+//! - Windows (DX12): D3D12Resource + D3D11SharedHandle + VulkanImage + GlesTexture
+//! - macOS (Metal):  MetalTexture
+//! - Linux (Vulkan): VulkanImage
 
 #[path = "common/mod.rs"]
 mod common;
 
+use std::sync::Arc;
+
+use common::SourceFactory;
 use iced::widget::{Shader, column, row, shader, text};
 use iced::{Element, Length, Rectangle, wgpu};
 use wgpu_interop::DeviceInterop;
 
-/// HANDLE wrapper that is Send + Sync for use in iced primitives.
-/// Shared NTHANDLE is process-wide and not thread-affine.
-#[derive(Clone, Copy)]
-struct SyncHandle(windows::Win32::Foundation::HANDLE);
-unsafe impl Send for SyncHandle {}
-unsafe impl Sync for SyncHandle {}
-impl std::fmt::Debug for SyncHandle {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "SyncHandle({:?})", self.0)
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-enum PreparedSource {
-    D3D12Resource,
-    D3D11SharedHandle(SyncHandle),
-    VulkanImage { seed: u64 },
-    GlesTexture { seed: u64 },
-}
-
 struct InteropProgram {
     slot: usize,
-    source: PreparedSource,
+    factory: Arc<dyn SourceFactory>,
 }
 
 impl InteropProgram {
@@ -47,10 +27,18 @@ impl InteropProgram {
     }
 }
 
-#[derive(Debug)]
 struct InteropPrimitive {
     slot: usize,
-    source: PreparedSource,
+    factory: Arc<dyn SourceFactory>,
+}
+
+impl std::fmt::Debug for InteropPrimitive {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("InteropPrimitive")
+            .field("slot", &self.slot)
+            .field("label", &self.factory.label())
+            .finish()
+    }
 }
 
 impl<Message> shader::Program<Message> for InteropProgram {
@@ -65,7 +53,7 @@ impl<Message> shader::Program<Message> for InteropProgram {
     ) -> Self::Primitive {
         InteropPrimitive {
             slot: self.slot,
-            source: self.source,
+            factory: Arc::clone(&self.factory),
         }
     }
 }
@@ -156,73 +144,18 @@ impl shader::Pipeline for InteropPipeline {
 }
 
 impl InteropPipeline {
-    fn import_texture(
-        &mut self,
-        device: &wgpu::Device,
-        _queue: &wgpu::Queue,
-        slot: usize,
-        source: PreparedSource,
-    ) {
-        use wgpu_interop::TextureSourceTypes;
-
-        let supported = device.supported_sources();
-        let required = match source {
-            PreparedSource::D3D12Resource => TextureSourceTypes::D3D12Resource,
-            PreparedSource::D3D11SharedHandle(_) => TextureSourceTypes::D3D11SharedHandle,
-            PreparedSource::VulkanImage { .. } => TextureSourceTypes::VulkanImage,
-            PreparedSource::GlesTexture { .. } => TextureSourceTypes::GlesTexture,
-        };
-        if !supported.contains(required) {
+    fn import_texture(&mut self, device: &wgpu::Device, slot: usize, factory: &dyn SourceFactory) {
+        // Skip factories whose source type isn't supported by this
+        // wgpu backend (e.g. `MetalTexture` on a Vulkan/MoltenVK device).
+        if !device
+            .supported_sources()
+            .contains(factory.required_source())
+        {
             self.skipped.insert(slot);
+            eprintln!("  Skipping {} (not supported by backend)", factory.label());
             return;
         }
-
-        let desc = common::texture_desc();
-        let tex = match source {
-            PreparedSource::D3D12Resource => {
-                let d3d12_src = unsafe { common::create_d3d12_resource(device, 0xD3D12) };
-                unsafe {
-                    device
-                        .import_external_texture(d3d12_src, &desc)
-                        .expect("import D3D12Resource")
-                }
-            }
-            PreparedSource::D3D11SharedHandle(sync_handle) => {
-                let handle = sync_handle.0;
-                let tex = unsafe {
-                    device
-                        .import_external_texture(wgpu_interop::D3D11SharedHandle { handle }, &desc)
-                        .expect("import D3D11SharedHandle")
-                };
-                unsafe { windows::Win32::Foundation::CloseHandle(handle) }.ok();
-                tex
-            }
-            PreparedSource::VulkanImage { seed } => {
-                let source = common::create_vulkan_image(seed);
-                unsafe {
-                    device
-                        .import_external_texture(source, &desc)
-                        .expect("import VulkanImage")
-                }
-            }
-            PreparedSource::GlesTexture { seed } => {
-                let (name, _wgl_ctx, interop) = common::create_gles_texture(seed);
-                let source = wgpu_interop::GlesTexture {
-                    gl: &_wgl_ctx.gl,
-                    name,
-                    interop: Some(&interop),
-                };
-                match unsafe { device.import_external_texture(source, &desc) } {
-                    Ok(tex) => tex,
-                    Err(e) => {
-                        eprintln!("  Skipping GlesTexture: {e}");
-                        self.skipped.insert(slot);
-                        return;
-                    }
-                }
-            }
-        };
-
+        let tex = unsafe { factory.import(device) };
         let view = tex.create_view(&Default::default());
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("interop_bg"),
@@ -249,7 +182,7 @@ impl shader::Primitive for InteropPrimitive {
         &self,
         pipeline: &mut Self::Pipeline,
         device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        _queue: &wgpu::Queue,
         _bounds: &Rectangle,
         _viewport: &shader::Viewport,
     ) {
@@ -260,7 +193,7 @@ impl shader::Primitive for InteropPrimitive {
             pipeline.bind_groups.resize_with(self.slot + 1, || None);
         }
         if pipeline.bind_groups[self.slot].is_none() {
-            pipeline.import_texture(device, queue, self.slot, self.source);
+            pipeline.import_texture(device, self.slot, &*self.factory);
         }
     }
 
@@ -311,46 +244,17 @@ impl shader::Primitive for InteropPrimitive {
 }
 
 struct App {
-    programs: Vec<(String, InteropProgram)>,
+    programs: Vec<InteropProgram>,
 }
 
 impl App {
     fn new() -> (Self, iced::Task<()>) {
-        let handle = common::create_d3d11_shared_handle(0xD3D11);
-
-        let programs = vec![
-            (
-                "D3D12Resource".into(),
-                InteropProgram {
-                    slot: 0,
-                    source: PreparedSource::D3D12Resource,
-                },
-            ),
-            (
-                "D3D11SharedHandle".into(),
-                InteropProgram {
-                    slot: 1,
-                    source: PreparedSource::D3D11SharedHandle(SyncHandle(handle)),
-                },
-            ),
-            (
-                "VulkanImage".into(),
-                InteropProgram {
-                    slot: 2,
-                    source: PreparedSource::VulkanImage { seed: 0x71CA },
-                },
-            ),
-            (
-                "GlesTexture".into(),
-                InteropProgram {
-                    slot: 3,
-                    source: PreparedSource::GlesTexture { seed: 0x61E5 },
-                },
-            ),
-        ];
-
+        let programs: Vec<InteropProgram> = common::platform_sources()
+            .into_iter()
+            .enumerate()
+            .map(|(slot, factory)| InteropProgram { slot, factory })
+            .collect();
         eprintln!("{} programs created", programs.len());
-
         (App { programs }, iced::Task::none())
     }
 
@@ -362,8 +266,8 @@ impl App {
         let items: Vec<Element<'_, ()>> = self
             .programs
             .iter()
-            .map(|(label, program)| {
-                column![text(label.as_str()).size(16), program.view()]
+            .map(|program| {
+                column![text(program.factory.label()).size(16), program.view()]
                     .spacing(8)
                     .width(Length::Fill)
                     .into()

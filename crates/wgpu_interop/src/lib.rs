@@ -7,7 +7,10 @@
 //!
 //! - [`D3D11SharedHandle`] / [`D3D11Interop`] — Windows, via NTHANDLE → D3D12
 //! - [`D3D12Resource`] — Windows, direct D3D12 resource wrap
-//! - [`VulkanImage`] — all platforms, via opaque fd (Linux) or NTHANDLE (Windows)
+//! - [`VulkanImage`] — Linux (opaque fd) and Windows (NTHANDLE)
+//! - [`MetalTexture`] — Apple, direct Metal HAL wrap
+//! - [`IOSurfaceTexture`] — Apple, common substrate for Metal and
+//!   Vulkan-via-MoltenVK (with the `vulkan-portability` feature)
 //! - [`GlesTexture`] — all platforms, GL texture via GLES HAL or GPU blit
 //!
 //! # Example
@@ -58,6 +61,12 @@ pub use sources::d3d11::{D3D11Interop, D3D11SharedHandle};
 #[cfg(target_os = "windows")]
 pub use sources::d3d12::D3D12Resource;
 
+// Source types — Apple
+#[cfg(target_vendor = "apple")]
+pub use sources::iosurface::{IOSurfaceTexture, create_io_surface_bgra};
+#[cfg(target_vendor = "apple")]
+pub use sources::metal::{MetalInterop, MetalTexture};
+
 // Source types — Windows/Linux
 #[cfg(any(target_os = "windows", target_os = "linux"))]
 pub use sources::gl::{GlInterop, GlProcLoader};
@@ -88,6 +97,10 @@ pub enum TextureSource<'a> {
     D3D12Resource(D3D12Resource),
     #[cfg(target_os = "windows")]
     D3D11SharedHandle(D3D11SharedHandle),
+    #[cfg(target_vendor = "apple")]
+    MetalTexture(MetalTexture),
+    #[cfg(target_vendor = "apple")]
+    IOSurfaceTexture(IOSurfaceTexture),
     VulkanImage(VulkanImage),
     GlesTexture(GlesTexture<'a>),
 }
@@ -101,6 +114,10 @@ bitflags::bitflags! {
         const D3D11SharedHandle = 1 << 1;
         const VulkanImage = 1 << 2;
         const GlesTexture = 1 << 3;
+        #[cfg(target_vendor = "apple")]
+        const MetalTexture = 1 << 4;
+        #[cfg(target_vendor = "apple")]
+        const IOSurfaceTexture = 1 << 5;
     }
 }
 
@@ -121,6 +138,20 @@ impl From<D3D11SharedHandle> for TextureSource<'_> {
 impl From<VulkanImage> for TextureSource<'_> {
     fn from(v: VulkanImage) -> Self {
         Self::VulkanImage(v)
+    }
+}
+
+#[cfg(target_vendor = "apple")]
+impl From<MetalTexture> for TextureSource<'_> {
+    fn from(m: MetalTexture) -> Self {
+        Self::MetalTexture(m)
+    }
+}
+
+#[cfg(target_vendor = "apple")]
+impl From<IOSurfaceTexture> for TextureSource<'_> {
+    fn from(s: IOSurfaceTexture) -> Self {
+        Self::IOSurfaceTexture(s)
     }
 }
 
@@ -164,11 +195,21 @@ impl DeviceInterop for wgpu::Device {
             if let Some(hal) = self.as_hal::<wgpu::wgc::api::Dx12>() {
                 return <wgpu::wgc::api::Dx12 as BackendImport>::import(self, &*hal, source, desc);
             }
+            #[cfg(target_vendor = "apple")]
+            if let Some(hal) = self.as_hal::<wgpu::wgc::api::Metal>() {
+                return <wgpu::wgc::api::Metal as BackendImport>::import(self, &*hal, source, desc);
+            }
+            #[cfg(any(
+                target_os = "windows",
+                target_os = "linux",
+                all(target_vendor = "apple", feature = "vulkan-portability"),
+            ))]
             if let Some(hal) = self.as_hal::<wgpu::wgc::api::Vulkan>() {
                 return <wgpu::wgc::api::Vulkan as BackendImport>::import(
                     self, &*hal, source, desc,
                 );
             }
+            #[cfg(any(target_os = "windows", target_os = "linux"))]
             if let Some(hal) = self.as_hal::<wgpu::wgc::api::Gles>() {
                 return <wgpu::wgc::api::Gles as BackendImport>::import(self, &*hal, source, desc);
             }
@@ -181,9 +222,19 @@ impl DeviceInterop for wgpu::Device {
         if unsafe { self.as_hal::<wgpu::wgc::api::Dx12>().is_some() } {
             return <wgpu::wgc::api::Dx12 as BackendImport>::supported_sources();
         }
+        #[cfg(target_vendor = "apple")]
+        if unsafe { self.as_hal::<wgpu::wgc::api::Metal>().is_some() } {
+            return <wgpu::wgc::api::Metal as BackendImport>::supported_sources();
+        }
+        #[cfg(any(
+            target_os = "windows",
+            target_os = "linux",
+            all(target_vendor = "apple", feature = "vulkan-portability"),
+        ))]
         if unsafe { self.as_hal::<wgpu::wgc::api::Vulkan>().is_some() } {
             return <wgpu::wgc::api::Vulkan as BackendImport>::supported_sources();
         }
+        #[cfg(any(target_os = "windows", target_os = "linux"))]
         if unsafe { self.as_hal::<wgpu::wgc::api::Gles>().is_some() } {
             return <wgpu::wgc::api::Gles as BackendImport>::supported_sources();
         }
