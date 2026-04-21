@@ -43,3 +43,12 @@ glow = "0.16"
 thiserror = "2"
 pollster = "0.4"
 winit = "0.30"
+wgpu_interop = { version = "0.1.0", path = "crates/wgpu_interop" }
+gst = { version = "0.25", package = "gstreamer" }
+gst-base = { version = "0.25", package = "gstreamer-base" }
+gst-video = { version = "0.25", package = "gstreamer-video", features = ["v1_18"] }
+gst-d3d12 = { version = "0.25", package = "gstreamer-d3d12" }
+gst-vulkan = { version = "0.25", package = "gstreamer-vulkan" }
+gst-gl = { version = "0.25", package = "gstreamer-gl" }
+gst-allocators = { version = "0.25", package = "gstreamer-allocators" }
+gst-plugin-version-helper = "0.8"

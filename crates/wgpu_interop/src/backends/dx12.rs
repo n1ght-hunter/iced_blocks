@@ -32,6 +32,7 @@ impl BackendImport for wgpu::wgc::api::Dx12 {
             TextureSource::VulkanImage(v) => unsafe {
                 wrap_shared_handle(device, hal, v.handle, desc)
             },
+            TextureSource::VulkanImageRaw(_) => Err(ImportError::Unsupported),
             TextureSource::GlesTexture(tex) => {
                 #[cfg(any(target_os = "windows", target_os = "linux"))]
                 {

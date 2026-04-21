@@ -14,3 +14,12 @@ pub struct VulkanImage {
     pub handle: windows::Win32::Foundation::HANDLE,
     pub memory_size: u64,
 }
+
+/// Wrap an existing `VkImage` as a wgpu texture without importing external memory.
+///
+/// Use this when you already have a `VkImage` with memory bound (e.g. from
+/// GStreamer's `GstVulkanImageMemory`). The caller is responsible for keeping
+/// the image alive for the lifetime of the returned wgpu texture.
+pub struct VulkanImageRaw {
+    pub image: ash::vk::Image,
+}

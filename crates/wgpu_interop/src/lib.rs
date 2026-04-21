@@ -53,7 +53,7 @@ pub use gl_blit::blit_framebuffer;
 
 // Source types — all platforms
 pub use sources::gles::GlesTexture;
-pub use sources::vulkan::VulkanImage;
+pub use sources::vulkan::{VulkanImage, VulkanImageRaw};
 
 // Source types — Windows
 #[cfg(target_os = "windows")]
@@ -102,6 +102,7 @@ pub enum TextureSource<'a> {
     #[cfg(target_vendor = "apple")]
     IOSurfaceTexture(IOSurfaceTexture),
     VulkanImage(VulkanImage),
+    VulkanImageRaw(VulkanImageRaw),
     GlesTexture(GlesTexture<'a>),
 }
 
@@ -113,6 +114,7 @@ bitflags::bitflags! {
         #[cfg(target_os = "windows")]
         const D3D11SharedHandle = 1 << 1;
         const VulkanImage = 1 << 2;
+        const VulkanImageRaw = 1 << 4;
         const GlesTexture = 1 << 3;
         #[cfg(target_vendor = "apple")]
         const MetalTexture = 1 << 4;
@@ -152,6 +154,12 @@ impl From<MetalTexture> for TextureSource<'_> {
 impl From<IOSurfaceTexture> for TextureSource<'_> {
     fn from(s: IOSurfaceTexture) -> Self {
         Self::IOSurfaceTexture(s)
+    }
+}
+
+impl From<VulkanImageRaw> for TextureSource<'_> {
+    fn from(v: VulkanImageRaw) -> Self {
+        Self::VulkanImageRaw(v)
     }
 }
 

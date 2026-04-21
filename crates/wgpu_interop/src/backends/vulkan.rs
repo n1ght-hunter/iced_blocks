@@ -6,14 +6,16 @@ use crate::{ImportError, TextureSource, TextureSourceTypes};
 
 impl BackendImport for wgpu::wgc::api::Vulkan {
     fn supported_sources() -> TextureSourceTypes {
+        let mut types = TextureSourceTypes::VulkanImage | TextureSourceTypes::VulkanImageRaw;
         #[cfg(any(target_os = "windows", target_os = "linux"))]
         {
-            TextureSourceTypes::VulkanImage | TextureSourceTypes::GlesTexture
+            types |= TextureSourceTypes::GlesTexture;
         }
         #[cfg(target_vendor = "apple")]
         {
-            TextureSourceTypes::IOSurfaceTexture
+            types |= TextureSourceTypes::IOSurfaceTexture;
         }
+        types
     }
 
     unsafe fn import(
@@ -26,6 +28,9 @@ impl BackendImport for wgpu::wgc::api::Vulkan {
             #[cfg(any(target_os = "windows", target_os = "linux"))]
             TextureSource::VulkanImage(img) => unsafe {
                 import_vulkan_image(device, hal, &img, desc)
+            },
+            TextureSource::VulkanImageRaw(img) => unsafe {
+                wrap_image(device, hal, img.image, desc, None)
             },
             #[cfg(any(target_os = "windows", target_os = "linux"))]
             TextureSource::GlesTexture(tex) => unsafe {
