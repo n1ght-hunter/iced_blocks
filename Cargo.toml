@@ -12,7 +12,7 @@ iced_frame = { version = "0.1.0", path = "crates/iced_frame" }
 iced_servo = { version = "0.1.0", path = "crates/iced_servo" }
 iced = "0.14"
 iced_wgpu = "0.14"
-wgpu = "27"
+wgpu = "29"
 raw-window-handle = "0.6"
 servo = { version = "=0.1.0", default-features = false }
 url = "2"
