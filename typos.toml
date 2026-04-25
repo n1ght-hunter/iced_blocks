@@ -1,2 +1,5 @@
+[default.extend-words]
+iy = "iy"
+
 [files]
 extend-exclude = ["release-plz.toml"]

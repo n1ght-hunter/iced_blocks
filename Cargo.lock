@@ -3551,6 +3551,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "iced_tool_flyout"
+version = "0.1.0"
+dependencies = [
+ "iced",
+]
+
+[[package]]
 name = "iced_wgpu"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
