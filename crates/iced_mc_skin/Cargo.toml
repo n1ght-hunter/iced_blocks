@@ -7,7 +7,8 @@ repository.workspace = true
 description = "Iced shader widget for rendering 3D Minecraft player skins"
 
 [dependencies]
-iced = { workspace = true, features = ["wgpu"] }
+iced = { workspace = true, features = ["wgpu", "advanced"] }
+iced_wgpu = { workspace = true }
 glam.workspace = true
 bytemuck.workspace = true
 
