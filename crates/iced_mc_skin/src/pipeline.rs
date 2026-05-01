@@ -2,7 +2,7 @@
 
 use iced::wgpu;
 
-use crate::vertex::Vertex;
+use crate::{skin::Skin, vertex::Vertex};
 
 const MAX_VERTICES: u64 = 512;
 const UNIFORM_SIZE: u64 = 64;
@@ -20,7 +20,7 @@ pub struct SkinPipeline {
     pub texture_bind_group: wgpu::BindGroup,
     pub depth_view: Option<wgpu::TextureView>,
     pub depth_size: (u32, u32),
-    pub skin_generation: u64,
+    skin: Option<Skin>,
 }
 
 impl SkinPipeline {
@@ -33,17 +33,11 @@ impl SkinPipeline {
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(view_proj));
     }
 
-    pub fn update_skin(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        data: &[u8],
-        generation: u64,
-    ) {
-        if self.skin_generation == generation {
+    pub fn update_skin(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, skin: &Skin) {
+        if self.skin.as_ref() == Some(skin) {
             return;
         }
-        self.skin_generation = generation;
+        self.skin = Some(skin.clone());
 
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {
@@ -52,7 +46,7 @@ impl SkinPipeline {
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
-            data,
+            skin.raw(),
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(64 * 4),
@@ -269,7 +263,7 @@ impl iced::widget::shader::Pipeline for SkinPipeline {
             texture_bind_group,
             depth_view: None,
             depth_size: (0, 0),
-            skin_generation: 0,
+            skin: None,
         }
     }
 }

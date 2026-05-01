@@ -3479,6 +3479,7 @@ dependencies = [
  "bytemuck",
  "glam 0.32.1",
  "iced",
+ "iced_wgpu",
  "image",
 ]
 

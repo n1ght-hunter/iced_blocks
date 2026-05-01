@@ -1,34 +1,24 @@
 //! Shader primitive that packages per-frame skin rendering data.
-
 use iced::{
     Rectangle, wgpu,
     widget::shader::{self, Viewport},
 };
 
-use crate::{pipeline::SkinPipeline, vertex::Vertex};
-
-static DEFAULT_SKIN: &[u8] = &[128u8; 64 * 64 * 4];
+use crate::{pipeline::SkinPipeline, skin::Skin, vertex::Vertex};
 
 #[derive(Debug)]
 pub struct SkinPrimitive {
     vertices: Vec<Vertex>,
     view_proj: [f32; 16],
-    skin_rgba: Option<Vec<u8>>,
-    skin_generation: u64,
+    skin: Skin,
 }
 
 impl SkinPrimitive {
-    pub fn new(
-        vertices: Vec<Vertex>,
-        view_proj: glam::Mat4,
-        skin_rgba: Option<Vec<u8>>,
-        skin_generation: u64,
-    ) -> Self {
+    pub fn new(vertices: Vec<Vertex>, view_proj: glam::Mat4, skin: Skin) -> Self {
         Self {
             vertices,
             view_proj: view_proj.to_cols_array(),
-            skin_rgba,
-            skin_generation,
+            skin,
         }
     }
 }
@@ -47,8 +37,7 @@ impl shader::Primitive for SkinPrimitive {
         pipeline.update_vertices(queue, &self.vertices);
         pipeline.update_uniforms(queue, &self.view_proj);
 
-        let skin_data = self.skin_rgba.as_deref().unwrap_or(DEFAULT_SKIN);
-        pipeline.update_skin(device, queue, skin_data, self.skin_generation);
+        pipeline.update_skin(device, queue, &self.skin);
 
         let w = viewport.physical_width();
         let h = viewport.physical_height();
