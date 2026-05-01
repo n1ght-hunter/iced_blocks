@@ -3,3 +3,7 @@ iy = "iy"
 
 [files]
 extend-exclude = ["release-plz.toml"]
+
+[default.extend-identifiers]
+max_cll = "max_cll"
+max_fall = "max_fall"
