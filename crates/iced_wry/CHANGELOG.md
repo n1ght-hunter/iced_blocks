@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/n1ght-hunter/iced_blocks/compare/iced_wry-v0.1.0...iced_wry-v0.2.0) - 2026-05-01
+
+### Changed
+
+- split out surface widget
+
+### Removed
+
+- remove iced_native_surface and use iced_frame in instead in iced_wry
+
 ### Changed
 
 - Widget layout now uses [`iced_frame`](../iced_frame). The native child window is positioned via `SizeRequestSlot::bounds()` which carries physical-pixel position and size. `WebViewController::apply_bounds()` reads it each tick to reposition the WRY child window.
