@@ -3430,7 +3430,7 @@ dependencies = [
 
 [[package]]
 name = "iced_frame"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "dpi",
  "iced",
@@ -3474,7 +3474,7 @@ dependencies = [
 
 [[package]]
 name = "iced_mc_skin"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bytemuck",
  "glam 0.32.1",
@@ -3521,7 +3521,7 @@ dependencies = [
 
 [[package]]
 name = "iced_servo"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "dpi",
  "euclid",
@@ -3613,7 +3613,7 @@ dependencies = [
 
 [[package]]
 name = "iced_wry"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "futures",
  "iced",
