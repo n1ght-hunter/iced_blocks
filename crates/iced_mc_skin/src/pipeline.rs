@@ -2,7 +2,7 @@
 
 use iced::wgpu;
 
-use crate::{source::Source, vertex::Vertex};
+use crate::{skin::Skin, vertex::Vertex};
 
 const MAX_VERTICES: u64 = 512;
 const UNIFORM_SIZE: u64 = 64;
@@ -20,7 +20,7 @@ pub struct SkinPipeline {
     pub texture_bind_group: wgpu::BindGroup,
     pub depth_view: Option<wgpu::TextureView>,
     pub depth_size: (u32, u32),
-    skin: Option<Source>,
+    skin: Option<Skin>,
 }
 
 impl SkinPipeline {
@@ -33,11 +33,11 @@ impl SkinPipeline {
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(view_proj));
     }
 
-    pub fn update_skin(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, data: &Source) {
-        if self.skin.as_ref() == Some(data) {
+    pub fn update_skin(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, skin: &Skin) {
+        if self.skin.as_ref() == Some(skin) {
             return;
         }
-        self.skin = Some(data.clone());
+        self.skin = Some(skin.clone());
 
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {
@@ -46,7 +46,7 @@ impl SkinPipeline {
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
-            data.raw(),
+            skin.raw(),
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(64 * 4),

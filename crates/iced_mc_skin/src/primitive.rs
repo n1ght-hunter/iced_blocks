@@ -4,21 +4,21 @@ use iced::{
     widget::shader::{self, Viewport},
 };
 
-use crate::{pipeline::SkinPipeline, source::Source, vertex::Vertex};
+use crate::{pipeline::SkinPipeline, skin::Skin, vertex::Vertex};
 
 #[derive(Debug)]
 pub struct SkinPrimitive {
     vertices: Vec<Vertex>,
     view_proj: [f32; 16],
-    skin_rgba: Source,
+    skin: Skin,
 }
 
 impl SkinPrimitive {
-    pub fn new(vertices: Vec<Vertex>, view_proj: glam::Mat4, skin_rgba: Source) -> Self {
+    pub fn new(vertices: Vec<Vertex>, view_proj: glam::Mat4, skin: Skin) -> Self {
         Self {
             vertices,
             view_proj: view_proj.to_cols_array(),
-            skin_rgba,
+            skin,
         }
     }
 }
@@ -37,7 +37,7 @@ impl shader::Primitive for SkinPrimitive {
         pipeline.update_vertices(queue, &self.vertices);
         pipeline.update_uniforms(queue, &self.view_proj);
 
-        pipeline.update_skin(device, queue, &self.skin_rgba);
+        pipeline.update_skin(device, queue, &self.skin);
 
         let w = viewport.physical_width();
         let h = viewport.physical_height();

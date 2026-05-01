@@ -1,6 +1,7 @@
 use iced::{
-    Element, Event, Length, Point, Size,
-    advanced::{Widget, layout, mouse, widget},
+    Background, Element, Event, Length, Point, Size,
+    advanced::{Widget, layout, mouse, renderer::Quad, widget},
+    window,
 };
 
 use crate::{
@@ -12,31 +13,43 @@ use crate::{
         geometry::{animated_vertices, player_parts},
     },
     primitive::SkinPrimitive,
-    source::Source,
+    skin::Skin,
+    style::{Catalog, Style, StyleFn},
 };
 
-pub fn skin_view(source: &Source) -> MCSkinView<'_> {
-    MCSkinView::new(source)
+/// Builds an [`MCSkinView`] widget rendering the given [`Skin`].
+pub fn skin_view<Theme: Catalog>(skin: &Skin) -> MCSkinView<'_, Theme> {
+    MCSkinView::new(skin)
 }
 
-pub struct MCSkinView<'a> {
-    source: &'a Source,
+/// Iced widget that renders an animated 3D Minecraft player skin with an
+/// orbit camera controlled by mouse drag and scroll.
+pub struct MCSkinView<'a, Theme = iced::Theme>
+where
+    Theme: Catalog,
+{
+    skin: &'a Skin,
     width: Length,
     height: Length,
     id: Option<widget::Id>,
     arm_variant: ArmVariant,
     animation_mode: AnimationMode,
+    class: <Theme as Catalog>::Class<'a>,
 }
 
-impl<'a> MCSkinView<'a> {
-    pub fn new(source: &'a Source) -> Self {
+impl<'a, Theme> MCSkinView<'a, Theme>
+where
+    Theme: Catalog,
+{
+    pub fn new(skin: &'a Skin) -> Self {
         Self {
-            source,
+            skin,
             width: Length::Shrink,
             height: Length::Shrink,
             arm_variant: ArmVariant::default(),
             animation_mode: AnimationMode::default(),
             id: None,
+            class: <Theme as Catalog>::default(),
         }
     }
 
@@ -64,6 +77,21 @@ impl<'a> MCSkinView<'a> {
         self.animation_mode = mode;
         self
     }
+
+    /// Sets the styling function used to resolve the widget's [`Style`].
+    pub fn style(mut self, style: impl Fn(&Theme) -> Style + 'a) -> Self
+    where
+        <Theme as Catalog>::Class<'a>: From<StyleFn<'a, Theme>>,
+    {
+        self.class = (Box::new(style) as StyleFn<'a, Theme>).into();
+        self
+    }
+
+    /// Sets the [`Catalog::Class`] used to resolve the widget's [`Style`].
+    pub fn class(mut self, class: impl Into<<Theme as Catalog>::Class<'a>>) -> Self {
+        self.class = class.into();
+        self
+    }
 }
 
 #[derive(Default)]
@@ -76,9 +104,10 @@ pub struct SkinState {
     parts: Vec<BodyPartMesh>,
 }
 
-impl<Message, Theme, Renderer> Widget<Message, Theme, Renderer> for MCSkinView<'_>
+impl<Message, Theme, Renderer> Widget<Message, Theme, Renderer> for MCSkinView<'_, Theme>
 where
-    Renderer: iced_wgpu::primitive::Renderer,
+    Theme: Catalog,
+    Renderer: iced_wgpu::primitive::Renderer + iced::advanced::Renderer,
 {
     fn size(&self) -> Size<Length> {
         Size {
@@ -149,12 +178,15 @@ where
         }
 
         state.animation.mode = self.animation_mode;
-        state.animation.tick();
 
         let cursor_pos = cursor.position().unwrap_or(Point::ORIGIN);
         let in_bounds = cursor.is_over(bounds);
 
         match event {
+            Event::Window(window::Event::RedrawRequested(now)) => {
+                state.animation.tick();
+                shell.request_redraw_at(*now + std::time::Duration::from_millis(16));
+            }
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) if in_bounds => {
                 state.is_dragging = true;
                 state.last_cursor = Some(cursor_pos);
@@ -174,6 +206,7 @@ where
                     state.camera.rotate(dx, dy);
                 }
                 state.last_cursor = Some(cursor_pos);
+                shell.request_redraw();
                 shell.capture_event();
             }
             Event::Mouse(mouse::Event::WheelScrolled { delta }) if in_bounds => {
@@ -182,18 +215,18 @@ where
                     mouse::ScrollDelta::Pixels { y, .. } => y / 50.0,
                 };
                 state.camera.zoom(scroll);
+                shell.request_redraw();
                 shell.capture_event();
             }
             _ => {}
         }
-        shell.request_redraw_at(iced::time::Instant::now() + std::time::Duration::from_millis(16));
     }
 
     fn draw(
         &self,
         tree: &iced::advanced::widget::Tree,
         renderer: &mut Renderer,
-        _: &Theme,
+        theme: &Theme,
         _: &iced::advanced::renderer::Style,
         layout: iced::advanced::Layout<'_>,
         _: iced::advanced::mouse::Cursor,
@@ -202,6 +235,17 @@ where
         let state = tree.state.downcast_ref::<SkinState>();
         let bounds = layout.bounds();
 
+        let style = <Theme as Catalog>::style(theme, &self.class);
+        if !matches!(style.background, Background::Color(c) if c.a == 0.0) {
+            renderer.fill_quad(
+                Quad {
+                    bounds,
+                    ..Default::default()
+                },
+                style.background,
+            );
+        }
+
         let aspect = bounds.width / bounds.height.max(1.0);
         let view_proj = state.camera.view_projection(aspect);
         let rotations = state.animation.limb_rotations();
@@ -209,7 +253,7 @@ where
 
         renderer.draw_primitive(
             bounds,
-            SkinPrimitive::new(vertices, view_proj, self.source.clone()),
+            SkinPrimitive::new(vertices, view_proj, self.skin.clone()),
         );
     }
 
@@ -223,11 +267,13 @@ where
     }
 }
 
-impl<'a, Message, Theme, Renderer> From<MCSkinView<'a>> for Element<'a, Message, Theme, Renderer>
+impl<'a, Message, Theme, Renderer> From<MCSkinView<'a, Theme>>
+    for Element<'a, Message, Theme, Renderer>
 where
-    Renderer: iced_wgpu::primitive::Renderer,
+    Theme: Catalog + 'a,
+    Renderer: iced_wgpu::primitive::Renderer + iced::advanced::Renderer,
 {
-    fn from(view: MCSkinView<'a>) -> Self {
+    fn from(view: MCSkinView<'a, Theme>) -> Self {
         Element::new(view)
     }
 }
